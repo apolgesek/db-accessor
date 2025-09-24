@@ -9,7 +9,8 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "update-ip": "powershell -ExecutionPolicy Bypass -File ../scripts/update-ip.ps1"
+    "synth": "npm run update-ip & cdk synth",
+    "update-ip": "powershell -ExecutionPolicy Bypass -File ./scripts/updateIp.ps1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

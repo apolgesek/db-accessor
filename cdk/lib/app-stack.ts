@@ -1,4 +1,4 @@
-import * as path from "path";
+﻿import * as path from "path";
 import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -74,7 +74,10 @@ export class DbAccessorStack extends cdk.Stack {
             actions: ["execute-api:Invoke"],
             resources: ["execute-api:/*"],
             conditions: {
-              NotIpAddress: { "aws:SourceIp": ["89.64.29.0/24"] },
+              NotIpAddress: { "aws:SourceIp": [
+                "109.243.65.77/24",
+                "89.64.29.102/24"
+              ] },
             },
           }),
           new iam.PolicyStatement({
@@ -140,3 +143,15 @@ export class DbAccessorStack extends cdk.Stack {
     });
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+

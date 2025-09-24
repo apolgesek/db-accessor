@@ -8,15 +8,22 @@ class LambdaHandler {
     const iamClient = new IAMClient({ region: process.env.AWS_REGION });
 
     const body = event.body ? JSON.parse(event.body) : {};
-    const iamUserName = body.userName;
-    const tableName = body.tableName;
-    const partitionKey = body.partitionKey;
-    const duration = body.duration;
+    const iamUserName: string = body.userName;
+    const tableName: string = body.tableName;
+    const partitionKey: string = body.partitionKey;
+    const duration: string | number = body.duration;
 
     if (!iamUserName || !tableName || !partitionKey || !duration) {
       return {
         statusCode: 400,
         body: JSON.stringify({ message: 'Missing required fields' }),
+      };
+    }
+
+    if (!duration.toString().match(/^[1-9][0-9]{0,1}$/)) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: 'Invalid duration format' }),
       };
     }
 
@@ -76,7 +83,7 @@ class LambdaHandler {
     return {
       statusCode: 200,
       body: JSON.stringify({
-        message: `Readonly access granted for user ${iamUserName}, table ${tableName}, item pK: ${partitionKey}`,
+        message: `Readonly access granted for user ${iamUserName}, table ${tableName}, item pK: ${partitionKey}, duration: ${durationHours} hour(s)`,
       }),
     };
   }
