@@ -1,0 +1,210 @@
+name: 🧪 CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-central-1
+  CDK_ROLE_TO_ASSUME_ARN: ${{ vars.CDK_ROLE_TO_ASSUME_ARN }}
+
+jobs:
+  validate-conventional-commits:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: webiny/action-conventional-commits@v1.3.0
+        with:
+          allowed-commit-types: 'feat,fix,refactor,chore'
+
+      - name: Set semver label from commits
+        if: ${{ success() }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.info('No pull_request context, skipping.');
+              return;
+            }
+
+            const { data: commits } = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            // Start with no bump; escalate based on commit types.
+            // Rules:
+            //  - major: BREAKING CHANGE or type!:
+            //  - minor: feat
+            //  - patch: fix
+            //  - chore/refactor alone => no bump (skip labeling)
+            let bump = 'none';
+            for (const { commit } of commits) {
+              const msg = commit.message;
+              const firstLine = msg.split('\n')[0];
+              // Major
+              if (/BREAKING CHANGE/i.test(msg) || /^(\w+)(\(.+\))?!:/.test(firstLine)) {
+                bump = 'major';
+                break;
+              }
+              // Minor
+              if (bump !== 'major' && /^feat(\(.+\))?:/.test(firstLine)) {
+                bump = 'minor';
+                continue;
+              }
+              // Patch
+              if (bump !== 'major' && bump !== 'minor' && /^fix(\(.+\))?:/.test(firstLine)) {
+                bump = 'patch';
+                continue;
+              }
+              // chore/refactor do not change bump if already none.
+            }
+
+            if (bump === 'none') {
+              core.info('All commits are chore/refactor (or no semantic changes). Skipping semver label.');
+              // Remove any existing semver labels if present
+              const semverLabelsAll = ['semver:major', 'semver:minor', 'semver:patch'];
+              const existing = pr.labels.map(l => l.name);
+              for (const l of semverLabelsAll) {
+                if (existing.includes(l)) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: pr.number,
+                      name: l,
+                    });
+                  } catch (e) {
+                    core.info(`Could not remove label ${l}: ${e.message}`);
+                  }
+                }
+              }
+              return;
+            }
+
+            const labelToAdd = `semver:${bump}`;
+            const semverLabels = ['semver:major', 'semver:minor', 'semver:patch'];
+
+            // Current labels on PR
+            const existing = pr.labels.map(l => l.name);
+
+            // Remove other semver labels if present
+            for (const l of semverLabels) {
+              if (l !== labelToAdd && existing.includes(l)) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    name: l,
+                  });
+                } catch (e) {
+                  core.info(`Could not remove label ${l}: ${e.message}`);
+                }
+              }
+            }
+
+            // Add target label if missing
+            if (!existing.includes(labelToAdd)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [labelToAdd],
+              });
+            }
+
+            core.info(`Applied ${labelToAdd} to PR #${pr.number}.`);
+
+  changes:
+    needs: validate-conventional-commits
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter-app.outputs.app }}
+      infra: ${{ steps.filter-infra.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter-app
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            app:
+              - '/src/**'
+              - '/package.json'
+              - '/package-lock.json'
+              - '/tsconfig*.json'
+              - '/.eslintrc.js'
+              - '/.eslintignore'
+
+      - id: filter-infra
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            infra:
+              - '/infra/bin/**'
+              - '/infra/lib/**'
+              - '/infra/package.json'
+              - '/infra/package-lock.json'
+              - '/infra/tsconfig*.json'
+
+  cdk-diff:
+    needs: [validate-conventional-commits, changes]
+    if: needs.validate-conventional-commits.result == 'success' && needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials for CDK diff
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.CDK_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js for CDK
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install infra dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: Run CDK diff
+        id: cdk_diff
+        working-directory: infra
+        run: |
+          npx cdk diff --all > cdk-diff.txt || true
+          cat cdk-diff.txt
+
+      - name: Add CDK diff to summary
+        if: always()
+        working-directory: infra
+        run: |
+          echo "## CDK Diff" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s cdk-diff.txt ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat cdk-diff.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No CDK diff output." >> "$GITHUB_STEP_SUMMARY"
+          fi

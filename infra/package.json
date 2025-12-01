@@ -1,16 +1,15 @@
 {
-  "name": "cdk",
+  "name": "infra",
   "version": "0.1.0",
   "bin": {
-    "cdk": "bin/cdk.js"
+    "app": "bin/app.js"
   },
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "synth": "npm run update-ip & cdk synth",
-    "update-ip": "powershell -ExecutionPolicy Bypass -File ./scripts/updateIp.ps1"
+    "synth": "cdk synth"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

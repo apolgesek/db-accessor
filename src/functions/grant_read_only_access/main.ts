@@ -1,6 +1,13 @@
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { AttachUserPolicyCommand, CreatePolicyCommand, CreatePolicyCommandInput, IAMClient } from '@aws-sdk/client-iam';
+import {
+  AttachUserPolicyCommand,
+  CreatePolicyCommand,
+  CreatePolicyCommandInput,
+  GetUserCommand,
+  IAMClient,
+} from '@aws-sdk/client-iam';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { Response } from '../../shared/response';
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
@@ -14,22 +21,27 @@ class LambdaHandler {
     const duration: string | number = body.duration;
 
     if (!iamUserName || !tableName || !partitionKey || !duration) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: 'Missing required fields' }),
-      };
+      return Response.error(400, 'Missing required fields');
     }
 
     if (!duration.toString().match(/^[1-9][0-9]{0,1}$/)) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: 'Invalid duration format' }),
-      };
+      return Response.error(400, 'Invalid duration format');
+    }
+
+    try {
+      await iamClient.send(
+        new GetUserCommand({
+          UserName: iamUserName,
+        }),
+      );
+    } catch (error) {
+      console.error('Error fetching IAM user:', error);
+      return Response.error(404, `IAM user ${iamUserName} not found`);
     }
 
     const durationHours = duration ? Math.min(Math.max(Number(duration), 1), 24) : 1;
     const currentDate = new Date();
-    const expirationDate = new Date(Date.now() + durationHours * 3_600 * 1_000);
+    const expirationDate = new Date(currentDate.getTime() + durationHours * 3_600 * 1_000);
 
     const createPolicyParams: CreatePolicyCommandInput = {
       PolicyDocument: JSON.stringify({
@@ -71,7 +83,7 @@ class LambdaHandler {
 
     const dynamoDbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
     const params = {
-      TableName: 'AuditLogs',
+      TableName: process.env.AUDIT_LOGS_TABLE_NAME,
       Item: {
         UserId: { S: 'iam_user' },
         CreatedAt: { N: currentDate.getTime().toString() },
@@ -80,12 +92,9 @@ class LambdaHandler {
 
     await dynamoDbClient.send(new PutItemCommand(params));
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: `Readonly access granted for user ${iamUserName}, table ${tableName}, item pK: ${partitionKey}, duration: ${durationHours} hour(s)`,
-      }),
-    };
+    return Response.success(
+      `Readonly access granted for user ${iamUserName}, table ${tableName}, item pK: ${partitionKey}, duration: ${durationHours} hour(s)`,
+    );
   }
 }
 
