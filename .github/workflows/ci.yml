@@ -146,27 +146,27 @@ jobs:
         with:
           filters: |
             app:
-              - '/src/**'
-              - '/package.json'
-              - '/package-lock.json'
-              - '/tsconfig*.json'
-              - '/.eslintrc.js'
-              - '/.eslintignore'
+              - 'src/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - '.eslintrc.js'
+              - '.eslintignore'
 
       - id: filter-infra
         uses: dorny/paths-filter@v3
         with:
           filters: |
             infra:
-              - '/infra/bin/**'
-              - '/infra/lib/**'
-              - '/infra/package.json'
-              - '/infra/package-lock.json'
-              - '/infra/tsconfig*.json'
+              - 'infra/bin/**'
+              - 'infra/lib/**'
+              - 'infra/package.json'
+              - 'infra/package-lock.json'
+              - 'infra/tsconfig*.json'
 
   cdk-diff:
     needs: [validate-conventional-commits, changes]
-    if: needs.validate-conventional-commits.result == 'success' && needs.changes.outputs.infra == 'true'
+    if: needs.validate-conventional-commits.result == 'success' && (needs.changes.outputs.infra == 'true' || needs.changes.outputs.app == 'true')
     runs-on: ubuntu-latest
     environment: dev
 
