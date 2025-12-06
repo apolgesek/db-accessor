@@ -1,6 +1,6 @@
-import { APIGatewayProxyResult } from "aws-lambda";
+import { APIGatewayProxyResult } from 'aws-lambda';
 
-const CORS_HEADER = { "Access-Control-Allow-Origin": "*" };
+const CORS_HEADER = { 'Access-Control-Allow-Origin': '*' };
 
 class Response {
   static success<T>(data: T): APIGatewayProxyResult;
@@ -9,11 +9,7 @@ class Response {
     return {
       statusCode: 200,
       headers: CORS_HEADER,
-      body: JSON.stringify(
-        typeof dataOrMessage === "string"
-          ? { message: dataOrMessage }
-          : dataOrMessage
-      ),
+      body: JSON.stringify(typeof dataOrMessage === 'string' ? { message: dataOrMessage } : dataOrMessage),
     };
   }
 

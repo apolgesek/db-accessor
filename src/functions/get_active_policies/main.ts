@@ -60,4 +60,4 @@ class LambdaHandler {
 const handlerInstance = new LambdaHandler();
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
 
-// refresh 1
+// refresh 2
