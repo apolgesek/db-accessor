@@ -1,6 +1,7 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/app.ts",
   "output": "cdk.out",
+  "outputsFile": "outputs.json",
   "watch": {
     "include": ["**"],
     "exclude": [

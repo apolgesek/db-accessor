@@ -82,6 +82,22 @@ jobs:
         run: |
           npx cdk deploy --all --require-approval never --verbose
 
+      - name: Add info to job summary
+        working-directory: infra
+        run: |
+          {
+            echo "## CDK outputs"
+            echo
+            echo "\`\`\`json"
+            # pretty-print if jq exists; fallback to cat
+            if command -v jq >/dev/null 2>&1; then
+              jq . outputs.json
+            else
+              cat outputs.json
+            fi
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   plan-tag:
     needs: changes
     if: needs.changes.outputs.app == 'true'
