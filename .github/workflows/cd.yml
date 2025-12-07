@@ -1,0 +1,180 @@
+name: ☁️ Deploy to Dev (CD)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed] # run when a PR gets closed; we'll guard for "merged" below
+
+permissions:
+  contents: write # to create tags
+  id-token: write # for OIDC to assume the AWS role
+
+concurrency:
+  group: cd-dev
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1
+  CDK_ROLE_TO_ASSUME_ARN: ${{ vars.CDK_ROLE_TO_ASSUME_ARN }}
+
+jobs:
+  changes:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter-app.outputs.app }}
+      infra: ${{ steps.filter-infra.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter-app
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            app:
+              - 'src/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - '.eslintrc.js'
+              - '.eslintignore'
+
+      - id: filter-infra
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            infra:
+              - 'infra/bin/**'
+              - 'infra/lib/**'
+              - 'infra/package.json'
+              - 'infra/package-lock.json'
+              - 'infra/tsconfig*.json'
+
+  cdk-deploy:
+    needs: [changes]
+    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials for CDK deploy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.CDK_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js for CDK
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install infra dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: Deploy CDK stack
+        working-directory: infra
+        run: |
+          npx cdk deploy --all --require-approval never --verbose
+
+  plan-tag:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      bump: ${{ steps.bump.outputs.bump }}
+      new_tag: ${{ steps.next.outputs.new_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Decide semver bump from labels
+        id: bump
+        shell: bash
+        env:
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          bump=patch
+          if echo "$PR_LABELS_JSON" | jq -e '.[] | select(.name=="semver:major")' >/dev/null; then
+            bump=major
+          elif echo "$PR_LABELS_JSON" | jq -e '.[] | select(.name=="semver:minor")' >/dev/null; then
+            bump=minor
+          elif echo "$PR_LABELS_JSON" | jq -e '.[] | select(.name=="semver:patch")' >/dev/null; then
+            bump=patch
+          fi
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next tag
+        id: next
+        shell: bash
+        env:
+          BUMP: ${{ steps.bump.outputs.bump }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
+          VER="${LAST_TAG#v}"
+          IFS='.' read -r MA MI PA <<< "${VER}"
+
+          re='^[0-9]+$'
+          [[ "$MA" =~ $re ]] || MA=0
+          [[ "$MI" =~ $re ]] || MI=0
+          [[ "$PA" =~ $re ]] || PA=0
+
+          case "${BUMP}" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch) PA=$((PA+1)) ;;
+          esac
+
+          NEW_TAG="v${MA}.${MI}.${PA}"
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Add info to job summary
+        run: |
+          echo "## Deploy summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- New tag: ${{ steps.next.outputs.new_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: dev" >> "$GITHUB_STEP_SUMMARY"
+
+  tag-release:
+    needs: [plan-tag]
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ needs.plan-tag.outputs.new_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: main
+
+      - name: Create + push tag on version commit
+        shell: bash
+        env:
+          NEW_TAG: ${{ needs.plan-tag.outputs.new_tag }}
+          TARGET_SHA: ${{ needs.update-version-file.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions"
+          git config user.email "<>"
+
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
+            echo "Tag ${NEW_TAG} already exists; skipping push."
+            exit 0
+          fi
+
+          git tag -a "${NEW_TAG}" "${TARGET_SHA}" -m "release: ${NEW_TAG}"
+          git push origin "${NEW_TAG}"
