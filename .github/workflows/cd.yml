@@ -157,13 +157,11 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          ref: main
 
       - name: Create + push tag on version commit
         shell: bash
         env:
           NEW_TAG: ${{ needs.plan-tag.outputs.new_tag }}
-          TARGET_SHA: ${{ needs.update-version-file.outputs.commit_sha }}
         run: |
           set -euo pipefail
           git config user.name  "github-actions"
@@ -176,5 +174,5 @@ jobs:
             exit 0
           fi
 
-          git tag -a "${NEW_TAG}" "${TARGET_SHA}" -m "release: ${NEW_TAG}"
+          git tag -a "${NEW_TAG}" -m "release: ${NEW_TAG}"
           git push origin "${NEW_TAG}"
