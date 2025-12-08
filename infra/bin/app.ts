@@ -5,12 +5,11 @@ import { DbAccessorStack } from '../lib/stack';
 const app = new cdk.App();
 new DbAccessorStack(app, 'DbAccessorStack', {
   env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION ?? 'eu-central-1',
+    account: process.env.CDK_DEPLOY_ACCOUNT || process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEPLOY_REGION || process.env.CDK_DEFAULT_REGION,
   },
-
+  stage: process.env.STAGE as 'dev' | 'prod',
   projectName: 'db-accessor',
-  existingGitHubOidcProviderArn: 'arn:aws:iam::058264309711:oidc-provider/token.actions.githubusercontent.com',
   githubOrg: 'apolgesek',
   githubRepo: 'db-accessor',
 });

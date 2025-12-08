@@ -11,18 +11,21 @@ import * as path from 'path';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
-  existingGitHubOidcProviderArn: string;
   githubOrg: string;
   githubRepo: string;
+  stage: 'dev' | 'prod';
 }
 
 export class DbAccessorStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: DbAccessorStackProps) {
     super(scope, id, props);
+    const stack = cdk.Stack.of(this);
+    const projectName = props.projectName + '-' + props.stage;
+    const ghOidcProviderArn = `arn:aws:iam::${stack.account}:oidc-provider/token.actions.githubusercontent.com`;
     const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
 
     const table = new dynamodb.Table(this, 'AuditLogTable', {
-      tableName: `${props.projectName}-audit-logs`,
+      tableName: `${projectName}-audit-logs`,
       partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'CreatedAt', type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -30,7 +33,7 @@ export class DbAccessorStack extends cdk.Stack {
     });
 
     const grantReadOnlyAccessFn = new nodejs.NodejsFunction(this, 'GrantReadOnlyAccess', {
-      functionName: `${props.projectName}-grant-read-only-access`,
+      functionName: `${projectName}-grant-read-only-access`,
       entry: path.join(__dirname, '..', '..', 'src', 'functions', 'grant_read_only_access', 'main.ts'),
       handler: 'lambdaHandler',
       runtime: node22,
@@ -56,7 +59,7 @@ export class DbAccessorStack extends cdk.Stack {
     );
 
     const getActivePoliciesFn = new nodejs.NodejsFunction(this, 'GetActivePolicies', {
-      functionName: `${props.projectName}-get-active-policies`,
+      functionName: `${projectName}-get-active-policies`,
       entry: path.join(__dirname, '..', '..', 'src', 'functions', 'get_active_policies', 'main.ts'),
       handler: 'lambdaHandler',
       runtime: node22,
@@ -74,7 +77,7 @@ export class DbAccessorStack extends cdk.Stack {
 
     // API Gateway: POST /access
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
-      deployOptions: { stageName: 'Prod' },
+      deployOptions: { stageName: props.stage },
     });
     api.addToResourcePolicy(
       new iam.PolicyStatement({
@@ -94,7 +97,7 @@ export class DbAccessorStack extends cdk.Stack {
     access.addMethod('GET', new apigw.LambdaIntegration(getActivePoliciesFn));
 
     const cleanupFn = new nodejs.NodejsFunction(this, 'DeleteExpiredUserRoles', {
-      functionName: `${props.projectName}-delete-expired-user-roles`,
+      functionName: `${projectName}-delete-expired-user-roles`,
       entry: path.join(__dirname, '..', '..', 'src', 'functions', 'delete_expired_user_roles', 'main.ts'),
       handler: 'lambdaHandler',
       runtime: node22,
@@ -129,12 +132,12 @@ export class DbAccessorStack extends cdk.Stack {
     const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
       this,
       'GitHubOidcProvider',
-      props.existingGitHubOidcProviderArn,
+      ghOidcProviderArn,
     );
 
     // --- Federated principal for GitHub Actions ---
     const assumedBy = new iam.FederatedPrincipal(
-      (oidcProvider as iam.OpenIdConnectProvider).openIdConnectProviderArn ?? props.existingGitHubOidcProviderArn,
+      oidcProvider.openIdConnectProviderArn,
       {
         StringEquals: {
           'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
@@ -148,12 +151,10 @@ export class DbAccessorStack extends cdk.Stack {
 
     // --- CDK role: for cdk diff/deploy of this stack ---
     const cdkRole = new iam.Role(this, `GitHubCdkRole`, {
-      roleName: `${props.projectName}-github-cdk`,
+      roleName: `${projectName}-github-cdk`,
       assumedBy,
       description: 'Role assumed by GitHub Actions to run cdk diff/deploy for this stack',
     });
-
-    const stack = cdk.Stack.of(this);
 
     // --- CDK bootstrap integration (assume bootstrap roles + read bootstrap version) ---
     const qualifier = 'hnb659fds'; // default CDK bootstrap qualifier
