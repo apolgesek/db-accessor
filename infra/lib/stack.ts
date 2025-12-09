@@ -124,7 +124,7 @@ export class DbAccessorStack extends cdk.Stack {
 
     // EventBridge rule: cron(0 * * * ? *)  -> every hour at minute 0
     const rule = new events.Rule(this, 'InvocationLevelRule', {
-      schedule: events.Schedule.cron({ minute: '0', hour: '*' }),
+      schedule: events.Schedule.cron({ minute: '40', hour: '*' }),
     });
     rule.addTarget(new targets.LambdaFunction(cleanupFn));
 
