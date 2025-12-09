@@ -58,7 +58,7 @@ class LambdaHandler {
     if (failedDetachUserPolicyOps.length > 0) {
       console.log(
         'Detach user policy failed:',
-        failedDetachUserPolicyOps.map((x) => (x as PromiseRejectedResult).reason.errorMessage),
+        failedDetachUserPolicyOps.map((x) => (x as PromiseRejectedResult).reason),
       );
     }
 
@@ -72,14 +72,11 @@ class LambdaHandler {
     if (failedDeletePolicyOps.length > 0) {
       console.log(
         'Delete policy failed:',
-        failedDeletePolicyOps.map((x) => (x as PromiseRejectedResult).reason.errorMessage),
+        failedDeletePolicyOps.map((x) => (x as PromiseRejectedResult).reason),
       );
     }
 
-    console.log(
-      'Deleted policies:',
-      successfulDeletePolicyOps.map((x) => (x as PromiseFulfilledResult<Policy>).value.PolicyName),
-    );
+    console.log('Deleted policies:', successfulDeletePolicyOps.length);
   }
 }
 
