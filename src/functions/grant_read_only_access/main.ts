@@ -49,6 +49,11 @@ class LambdaHandler {
         Statement: [
           {
             Effect: 'Allow',
+            Action: 'dynamodb:ListTables',
+            Resource: '*',
+          },
+          {
+            Effect: 'Allow',
             Action: 'dynamodb:DescribeTable',
             Resource: `arn:aws:dynamodb:${process.env.AWS_REGION}:${awsAccountId}:table/${tableName}`,
           },
