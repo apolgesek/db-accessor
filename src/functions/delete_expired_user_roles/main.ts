@@ -52,16 +52,33 @@ class LambdaHandler {
         }),
       ),
     );
-    await Promise.all(detachUserPolicyPromises);
+    const detachUserPolicyPromisesResult = await Promise.allSettled(detachUserPolicyPromises);
+    const failedDetachUserPolicyOps = detachUserPolicyPromisesResult.filter((x) => x.status === 'rejected');
+
+    if (failedDetachUserPolicyOps.length > 0) {
+      console.log(
+        'Detach user policy failed:',
+        failedDetachUserPolicyOps.map((x) => (x as PromiseRejectedResult).reason.errorMessage),
+      );
+    }
 
     const deletePolicyPromises = policiesToDelete.map((policy) =>
       iamClient.send(new DeletePolicyCommand({ PolicyArn: policy.Arn })),
     );
-    await Promise.all(deletePolicyPromises);
+    const deletePolicyPromisesResult = await Promise.allSettled(deletePolicyPromises);
+    const failedDeletePolicyOps = deletePolicyPromisesResult.filter((x) => x.status === 'rejected');
+    const successfulDeletePolicyOps = deletePolicyPromisesResult.filter((x) => x.status === 'fulfilled');
+
+    if (failedDeletePolicyOps.length > 0) {
+      console.log(
+        'Delete policy failed:',
+        failedDeletePolicyOps.map((x) => (x as PromiseRejectedResult).reason.errorMessage),
+      );
+    }
 
     console.log(
       'Deleted policies:',
-      policiesToDelete.map((x) => x.PolicyName),
+      successfulDeletePolicyOps.map((x) => (x as PromiseFulfilledResult<Policy>).value.PolicyName),
     );
   }
 }
