@@ -1,5 +1,3 @@
-REM .\cdk-deploy-to.bat 349036690903 eu-central-1 dev --all --profile apolgesek-dev --require-approval never
-
 @findstr /B /V @ %~dpnx0 > %~dpn0.ps1 && powershell -ExecutionPolicy Bypass %~dpn0.ps1 %*
 @exit /B %ERRORLEVEL%
 if ($args.length -ge 3) {
