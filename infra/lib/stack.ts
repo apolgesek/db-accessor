@@ -38,7 +38,10 @@ export class DbAccessorStack extends cdk.Stack {
       handler: 'lambdaHandler',
       runtime: node22,
       architecture: lambda.Architecture.X86_64,
-      environment: { AUDIT_LOGS_TABLE_NAME: table.tableName },
+      environment: {
+        AUDIT_LOGS_TABLE_NAME: table.tableName,
+        IDENTITY_CENTER_ROLE_ARN: 'arn:aws:iam::058264309711:role/IdentityCenterAutomationRole',
+      },
       bundling: { minify: true, sourceMap: true, target: 'es2020' },
     });
 
