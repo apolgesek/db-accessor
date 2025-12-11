@@ -34,7 +34,7 @@ export class DbAccessorStack extends cdk.Stack {
 
     const grantReadOnlyAccessFn = new nodejs.NodejsFunction(this, 'GrantReadOnlyAccess', {
       functionName: `${projectName}-grant-read-only-access`,
-      entry: path.join(__dirname, '..', '..', 'src', 'functions', 'grant_read_only_access', 'main.ts'),
+      entry: path.join(__dirname, '..', '..', 'src', 'functions', 'grant_read_only_access', 'sso_user', 'main.ts'),
       handler: 'lambdaHandler',
       runtime: node22,
       architecture: lambda.Architecture.X86_64,

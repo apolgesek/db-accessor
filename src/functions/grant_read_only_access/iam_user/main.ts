@@ -7,7 +7,7 @@ import {
   IAMClient,
 } from '@aws-sdk/client-iam';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { Response } from '../../shared/response';
+import { Response } from '../../../shared/response';
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
@@ -15,12 +15,12 @@ class LambdaHandler {
     const iamClient = new IAMClient({ region: process.env.AWS_REGION });
 
     const body = event.body ? JSON.parse(event.body) : {};
-    const iamUserName: string = body.userName;
+    const userName: string = body.userName;
     const tableName: string = body.tableName;
     const partitionKey: string = body.partitionKey;
     const duration: string | number = body.duration;
 
-    if (!iamUserName || !tableName || !partitionKey || !duration) {
+    if (!userName || !tableName || !partitionKey || !duration) {
       return Response.error(400, 'Missing required fields');
     }
 
@@ -31,50 +31,52 @@ class LambdaHandler {
     try {
       await iamClient.send(
         new GetUserCommand({
-          UserName: iamUserName,
+          UserName: userName,
         }),
       );
     } catch (error) {
       console.error('Error fetching IAM user:', error);
-      return Response.error(404, `IAM user ${iamUserName} not found`);
+      return Response.error(404, `IAM user ${userName} not found`);
     }
 
     const durationHours = duration ? Math.min(Math.max(Number(duration), 1), 24) : 1;
     const currentDate = new Date();
     const expirationDate = new Date(currentDate.getTime() + durationHours * 3_600 * 1_000);
 
-    const createPolicyParams: CreatePolicyCommandInput = {
-      PolicyDocument: JSON.stringify({
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Effect: 'Allow',
-            Action: 'dynamodb:ListTables',
-            Resource: '*',
-          },
-          {
-            Effect: 'Allow',
-            Action: 'dynamodb:DescribeTable',
-            Resource: `arn:aws:dynamodb:${process.env.AWS_REGION}:${awsAccountId}:table/${tableName}`,
-          },
-          {
-            Effect: 'Allow',
-            Action: ['dynamodb:GetItem', 'dynamodb:Query'],
-            Resource: `arn:aws:dynamodb:${process.env.AWS_REGION}:${awsAccountId}:table/${tableName}`,
-            Condition: {
-              'ForAllValues:StringEquals': {
-                'dynamodb:LeadingKeys': [`${partitionKey}`],
-              },
-              DateGreaterThan: { 'aws:CurrentTime': currentDate.toISOString() },
-              DateLessThan: { 'aws:CurrentTime': expirationDate.toISOString() },
+    const inlinePolicy = JSON.stringify({
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Effect: 'Allow',
+          Action: 'dynamodb:ListTables',
+          Resource: '*',
+        },
+        {
+          Effect: 'Allow',
+          Action: 'dynamodb:DescribeTable',
+          Resource: `arn:aws:dynamodb:${process.env.AWS_REGION}:${awsAccountId}:table/${tableName}`,
+        },
+        {
+          Effect: 'Allow',
+          Action: ['dynamodb:GetItem', 'dynamodb:Query'],
+          Resource: `arn:aws:dynamodb:${process.env.AWS_REGION}:${awsAccountId}:table/${tableName}`,
+          Condition: {
+            'ForAllValues:StringEquals': {
+              'dynamodb:LeadingKeys': [`${partitionKey}`],
             },
+            DateGreaterThan: { 'aws:CurrentTime': currentDate.toISOString() },
+            DateLessThan: { 'aws:CurrentTime': expirationDate.toISOString() },
           },
-        ],
-      }),
-      PolicyName: `dynamodb_GetItemPolicy_${iamUserName}_${tableName}_${partitionKey}`,
+        },
+      ],
+    });
+
+    const createPolicyParams: CreatePolicyCommandInput = {
+      PolicyDocument: inlinePolicy,
+      PolicyName: `dynamodb_GetItemPolicy_${userName}_${tableName}_${partitionKey}`,
       Tags: [
         { Key: 'ExpiresAt', Value: expirationDate.getTime().toString() },
-        { Key: 'UserName', Value: iamUserName },
+        { Key: 'UserName', Value: userName },
       ],
     };
 
@@ -82,7 +84,7 @@ class LambdaHandler {
     await iamClient.send(
       new AttachUserPolicyCommand({
         PolicyArn: createPolicyOutput.Policy?.Arn,
-        UserName: iamUserName,
+        UserName: userName,
       }),
     );
 
@@ -98,7 +100,7 @@ class LambdaHandler {
     await dynamoDbClient.send(new PutItemCommand(params));
 
     return Response.success(
-      `Readonly access granted for user ${iamUserName}, table ${tableName}, item pK: ${partitionKey}, duration: ${durationHours} hour(s)`,
+      `Readonly access granted for user ${userName}, table ${tableName}, item pK: ${partitionKey}, duration: ${durationHours} hour(s)`,
     );
   }
 }
