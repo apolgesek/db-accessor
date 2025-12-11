@@ -60,6 +60,13 @@ export class DbAccessorStack extends cdk.Stack {
         resources: ['arn:aws:iam::*:user/*'],
       }),
     );
+    grantReadOnlyAccessFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: ['arn:aws:iam::058264309711:role/IdentityCenterAutomationRole'],
+      }),
+    );
 
     const getActivePoliciesFn = new nodejs.NodejsFunction(this, 'GetActivePolicies', {
       functionName: `${projectName}-get-active-policies`,
