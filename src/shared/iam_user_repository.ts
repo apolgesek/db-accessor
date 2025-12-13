@@ -21,13 +21,13 @@ export class IAMUserRepository implements IUserRepository<never, IAMAssignPolicy
     return result.User?.UserId;
   }
 
-  async assignPolicy(userId: string, policy: string, context: IAMAssignPolicyContext): Promise<string | undefined> {
+  async assignPolicy(userName: string, policy: string, context: IAMAssignPolicyContext): Promise<string | undefined> {
     const createPolicyParams: CreatePolicyCommandInput = {
       PolicyDocument: policy,
-      PolicyName: `IAMdynamodb_GetItemPolicy_${userId}_${context.tableName}_${context.partitionKey}`,
+      PolicyName: `IAMdynamodb_GetItemPolicy_${userName}_${context.tableName}_${context.partitionKey}`,
       Tags: [
         { Key: 'ExpiresAt', Value: context.expirationDate.getTime().toString() },
-        { Key: 'UserName', Value: userId },
+        { Key: 'UserName', Value: userName },
       ],
     };
 
@@ -35,7 +35,7 @@ export class IAMUserRepository implements IUserRepository<never, IAMAssignPolicy
     const result = await this._iamClient.send(
       new AttachUserPolicyCommand({
         PolicyArn: createPolicyOutput.Policy?.Arn,
-        UserName: userId,
+        UserName: userName,
       }),
     );
 
