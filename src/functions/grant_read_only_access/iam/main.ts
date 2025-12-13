@@ -36,7 +36,7 @@ class LambdaHandler {
       expirationDate,
     });
 
-    const requestId = await iamUserRepository.assignPolicy(userId, inlinePolicy, {
+    const requestId = await iamUserRepository.assignPolicy(userName, inlinePolicy, {
       tableName,
       partitionKey,
       expirationDate,
