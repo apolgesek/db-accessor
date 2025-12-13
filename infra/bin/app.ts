@@ -12,4 +12,6 @@ new DbAccessorStack(app, 'DbAccessorStack', {
   projectName: 'db-accessor',
   githubOrg: 'apolgesek',
   githubRepo: 'db-accessor',
+  identityCenterRoleArn: 'arn:aws:iam::058264309711:role/IdentityCenterAutomationRole',
+  ssoInstanceArn: 'arn:aws:sso:::instance/ssoins-698754f79f02e2e0',
 });

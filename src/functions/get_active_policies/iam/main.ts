@@ -1,6 +1,6 @@
 import { IAMClient, ListPoliciesCommand, ListPolicyTagsCommand, Policy } from '@aws-sdk/client-iam';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { Response } from '../../shared/response';
+import { APIResponse } from '../../../shared/response';
 
 const LIST_POLICIES_MAX_ITEMS = 1_000;
 
@@ -53,11 +53,9 @@ class LambdaHandler {
       };
     });
 
-    return Response.success(response);
+    return APIResponse.success(response);
   }
 }
 
 const handlerInstance = new LambdaHandler();
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
-
-// refresh 202512081932
