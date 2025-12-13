@@ -80,6 +80,13 @@ export class DbAccessorStack extends cdk.Stack {
       IDENTITY_CENTER_ROLE_ARN: props.identityCenterRoleArn,
       INSTANCE_ARN: props.ssoInstanceArn,
     });
+    ssoGetActivePoliciesFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: [props.identityCenterRoleArn],
+      }),
+    );
 
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
