@@ -2,7 +2,7 @@ import { APIGatewayProxyResult } from 'aws-lambda';
 
 const CORS_HEADER = { 'Access-Control-Allow-Origin': '*' };
 
-class Response {
+export class APIResponse {
   static success<T>(data: T): APIGatewayProxyResult;
   static success(message: string): APIGatewayProxyResult;
   static success<T>(dataOrMessage: T | string): APIGatewayProxyResult {
@@ -21,5 +21,3 @@ class Response {
     };
   }
 }
-
-export { Response };
