@@ -22,7 +22,7 @@ class LambdaHandler {
       );
 
       for (const policy of res.Policies || []) {
-        if (policy.PolicyName?.startsWith('IAMdynamodb_GetItemPolicy')) {
+        if (policy.PolicyName?.startsWith('IAM')) {
           matched.push(policy);
         }
       }
