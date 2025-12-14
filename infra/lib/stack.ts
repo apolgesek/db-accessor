@@ -116,18 +116,18 @@ export class DbAccessorStack extends cdk.Stack {
     ssoAccess.addMethod('POST', new apigw.LambdaIntegration(ssoGrantReadOnlyAccessFn));
     ssoAccess.addMethod('GET', new apigw.LambdaIntegration(ssoGetActivePoliciesFn));
 
-    const iamCleanupFn = createLambda(this, projectName, 'delete-expired-user-roles', 'iam', {
+    const deleteExpiredPoliciesFn = createLambda(this, projectName, 'delete-expired-policies', 'iam', {
       TABLE_NAME: table.tableName,
     });
 
-    iamCleanupFn.addToRolePolicy(
+    deleteExpiredPoliciesFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['iam:ListPolicies', 'iam:ListPolicyTags', 'iam:DeletePolicy'],
         resources: ['arn:aws:iam::*:policy/*'],
       }),
     );
-    iamCleanupFn.addToRolePolicy(
+    deleteExpiredPoliciesFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['iam:DetachUserPolicy'],
@@ -136,9 +136,9 @@ export class DbAccessorStack extends cdk.Stack {
     );
 
     const rule = new events.Rule(this, 'InvocationLevelRule', {
-      schedule: events.Schedule.cron({ minute: '0', hour: '*' }),
+      schedule: events.Schedule.cron({ minute: '0', hour: '0' }),
     });
-    rule.addTarget(new targets.LambdaFunction(iamCleanupFn));
+    rule.addTarget(new targets.LambdaFunction(deleteExpiredPoliciesFn));
 
     // --- OIDC provider (imported) ---
     const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
