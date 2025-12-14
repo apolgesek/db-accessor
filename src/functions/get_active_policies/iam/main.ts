@@ -35,11 +35,7 @@ class LambdaHandler {
     );
     const listPolicyTagsResults = await Promise.all(listPolicyTagsPromises);
 
-    const activePolicies = matched.filter((x, i) =>
-      listPolicyTagsResults?.[i].Tags?.some((tag) => tag?.Key === 'ExpiresAt' && Number(tag?.Value) > currentDate),
-    );
-
-    const response = activePolicies.map((policy) => {
+    const response = matched.map((policy) => {
       const expiresAt = listPolicyTagsResults
         ?.find((_, i) => matched[i].PolicyId === policy.PolicyId)
         ?.Tags?.find((tag) => tag?.Key === 'ExpiresAt')?.Value;
