@@ -34,8 +34,6 @@ class LambdaHandler {
     const creds = await getMgmtCreds();
     const ssoAdmin = new SSOAdminClient({ region: process.env.AWS_REGION, credentials: creds });
 
-    const currentDate = Date.now();
-
     const matched: { arn: string; name: string; creationDate?: Date }[] = [];
     let nextToken: string | undefined;
 
@@ -80,11 +78,7 @@ class LambdaHandler {
     );
     const listPolicyTagsResults = await Promise.all(listPolicyTagsPromises);
 
-    const activePolicies = matched.filter((x, i) =>
-      listPolicyTagsResults?.[i].Tags?.some((tag) => tag?.Key === 'ExpiresAt' && Number(tag?.Value) > currentDate),
-    );
-
-    const response = activePolicies.map((policy) => {
+    const response = matched.map((policy) => {
       const expiresAt = listPolicyTagsResults
         ?.find((_, i) => matched[i].arn === policy.arn)
         ?.Tags?.find((tag) => tag?.Key === 'ExpiresAt')?.Value;
