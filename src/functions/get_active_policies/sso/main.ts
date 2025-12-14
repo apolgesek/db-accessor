@@ -60,7 +60,7 @@ class LambdaHandler {
           );
 
           const ps = desc.PermissionSet;
-          if (ps?.Name && ps.Name.startsWith('SSOdynamodb_GetItemPolicy')) {
+          if (ps?.Name && ps.Name.startsWith('SSO')) {
             return { arn, name: ps.Name, creationDate: ps.CreatedDate };
           }
 
