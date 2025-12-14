@@ -76,7 +76,7 @@ class LambdaHandler {
     } while (nextToken);
 
     const listPolicyTagsPromises = matched.map((policy) =>
-      ssoAdmin.send(new ListTagsForResourceCommand({ ResourceArn: policy.arn })),
+      ssoAdmin.send(new ListTagsForResourceCommand({ InstanceArn: INSTANCE_ARN, ResourceArn: policy.arn })),
     );
     const listPolicyTagsResults = await Promise.all(listPolicyTagsPromises);
 
