@@ -43,10 +43,13 @@ class LambdaHandler {
       const expiresAt = listPolicyTagsResults
         ?.find((_, i) => matched[i].PolicyId === policy.PolicyId)
         ?.Tags?.find((tag) => tag?.Key === 'ExpiresAt')?.Value;
+      const userName = listPolicyTagsResults
+        ?.find((_, i) => matched[i].PolicyId === policy.PolicyId)
+        ?.Tags?.find((tag) => tag?.Key === 'UserName')?.Value;
 
       return {
         policyName: policy.PolicyName,
-        policyId: policy.PolicyId,
+        userName: userName,
         arn: policy.Arn,
         creationDate: policy.CreateDate,
         expiresAt: expiresAt ? Number(expiresAt) : null,
