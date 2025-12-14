@@ -1,5 +1,5 @@
 import { IAMClient } from '@aws-sdk/client-iam';
-import { IUserRepository } from './user_repository.interface';
+import { IUserManager } from './user_manager.interface';
 import { GetUserIdCommand, IdentitystoreClient } from '@aws-sdk/client-identitystore';
 import { Creds } from '../types/creds';
 import { SSOGetUserContext } from '../types/sso_get_user_context';
@@ -10,10 +10,16 @@ import {
   SSOAdminClient,
 } from '@aws-sdk/client-sso-admin';
 import { SSOAssignPolicyContext } from '../types/sso_assign_policy_context';
+import crypto from 'crypto';
 
+const slug = (s: string) =>
+  String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
 const IDENTITY_CENTER_REGION = process.env.IDENTITY_CENTER_REGION ?? 'eu-central-1';
 
-export class SSOUserRepository implements IUserRepository<SSOGetUserContext, SSOAssignPolicyContext> {
+export class SSOUserManager implements IUserManager<SSOGetUserContext, SSOAssignPolicyContext> {
   constructor(private readonly _creds?: Creds) {}
 
   iamClient = new IAMClient({ region: process.env.AWS_REGION });
@@ -40,7 +46,7 @@ export class SSOUserRepository implements IUserRepository<SSOGetUserContext, SSO
     const psRes = await this._ssoAdmin.send(
       new CreatePermissionSetCommand({
         InstanceArn: context.instanceArn,
-        Name: `SSOdynamodb_GetItemPolicy_${context.userName}_${context.tableName}_${context.partitionKey}`,
+        Name: this.setPermissionName('SSO', context.userName, context.tableName, context.partitionKey),
         SessionDuration: 'PT1H',
         Tags: [
           { Key: 'ExpiresAt', Value: context.expirationDate.getTime().toString() },
@@ -75,5 +81,16 @@ export class SSOUserRepository implements IUserRepository<SSOGetUserContext, SSO
     if (!requestId) throw new Error('Missing RequestId from CreateAccountAssignment.');
 
     return requestId;
+  }
+
+  private setPermissionName(prefix3: string, user: string, table: string, pk: string) {
+    const canonical = `dynamodb:GetItem|user=${user}|table=${table}|pk=${pk}`;
+    const hash = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
+
+    const u = slug(user).slice(0, 8);
+    const t = slug(table).slice(0, 10);
+    const h = hash.slice(0, 8);
+
+    return `${prefix3}_${u}_${t}_${h}`; // <= 32 by construction
   }
 }

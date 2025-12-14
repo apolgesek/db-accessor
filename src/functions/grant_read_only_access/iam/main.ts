@@ -1,6 +1,6 @@
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { IAMUserRepository } from '../../../shared/iam_user_repository';
+import { IAMUserManager } from '../../../shared/iam_user_manager';
 import { APIResponse } from '../../../shared/response';
 import { createPolicy } from '../dynamodb_policy';
 import { validate } from '../request_validator';
@@ -19,9 +19,9 @@ class LambdaHandler {
       return result;
     }
 
-    const iamUserRepository = new IAMUserRepository();
+    const iamUserManager = new IAMUserManager();
 
-    const userId = await iamUserRepository.getUser(userName);
+    const userId = await iamUserManager.getUser(userName);
     if (!userId) return APIResponse.error(404, `IAM user ${userName} not found`);
 
     const durationHours = duration ? Math.min(Math.max(Number(duration), 1), 24) : 1;
@@ -36,7 +36,7 @@ class LambdaHandler {
       expirationDate,
     });
 
-    const requestId = await iamUserRepository.assignPolicy(userName, inlinePolicy, {
+    const requestId = await iamUserManager.assignPolicy(userName, inlinePolicy, {
       tableName,
       partitionKey,
       expirationDate,
