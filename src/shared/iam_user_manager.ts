@@ -24,7 +24,7 @@ export class IAMUserManager implements IUserManager<never, IAMAssignPolicyContex
   async assignPolicy(userName: string, policy: string, context: IAMAssignPolicyContext): Promise<string | undefined> {
     const createPolicyParams: CreatePolicyCommandInput = {
       PolicyDocument: policy,
-      PolicyName: `IAMdynamodb_GetItemPolicy_${userName}_${context.tableName}_${context.partitionKey}`,
+      PolicyName: `IAM_${userName}_${context.tableName}_${context.partitionKey}`,
       Tags: [
         { Key: 'ExpiresAt', Value: context.expirationDate.getTime().toString() },
         { Key: 'UserName', Value: userName },

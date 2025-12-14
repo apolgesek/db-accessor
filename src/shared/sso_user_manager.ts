@@ -50,7 +50,7 @@ export class SSOUserManager implements IUserManager<SSOGetUserContext, SSOAssign
         SessionDuration: 'PT1H',
         Tags: [
           { Key: 'ExpiresAt', Value: context.expirationDate.getTime().toString() },
-          { Key: 'UserName', Value: userId },
+          { Key: 'UserName', Value: context.userName },
         ],
       }),
     );
