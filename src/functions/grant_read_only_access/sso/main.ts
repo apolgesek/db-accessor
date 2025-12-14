@@ -4,7 +4,7 @@ import { ListInstancesCommand, SSOAdminClient } from '@aws-sdk/client-sso-admin'
 import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../../shared/response';
-import { SSOUserRepository } from '../../../shared/sso_user_repository';
+import { SSOUserManager } from '../../../shared/sso_user_manager';
 import { createPolicy } from '../dynamodb_policy';
 import { validate } from '../request_validator';
 
@@ -53,8 +53,8 @@ class LambdaHandler {
     const instanceArn = inst.InstanceArn;
     const identityStoreId = inst.IdentityStoreId;
 
-    const ssoUserRepository = new SSOUserRepository(creds);
-    const userId = await ssoUserRepository.getUser(userName, { identityStoreId });
+    const ssoUserManager = new SSOUserManager(creds);
+    const userId = await ssoUserManager.getUser(userName, { identityStoreId });
     if (!userId) return APIResponse.error(404, `Identity Center user ${userName} not found`);
 
     const durationHours = duration ? Math.min(Math.max(Number(duration), 1), 24) : 1;
@@ -69,7 +69,7 @@ class LambdaHandler {
       expirationDate,
     });
 
-    const requestId = await ssoUserRepository.assignPolicy(userId, inlinePolicy, {
+    const requestId = await ssoUserManager.assignPolicy(userId, inlinePolicy, {
       instanceArn,
       awsAccountId,
       identityStoreId,

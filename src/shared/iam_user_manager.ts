@@ -5,10 +5,10 @@ import {
   GetUserCommand,
   IAMClient,
 } from '@aws-sdk/client-iam';
-import { IUserRepository } from './user_repository.interface';
+import { IUserManager } from './user_manager.interface';
 import { IAMAssignPolicyContext } from '../types/iam_assign_policy_context';
 
-export class IAMUserRepository implements IUserRepository<never, IAMAssignPolicyContext> {
+export class IAMUserManager implements IUserManager<never, IAMAssignPolicyContext> {
   _iamClient = new IAMClient({ region: process.env.AWS_REGION });
 
   async getUser(name: string): Promise<string | undefined> {
