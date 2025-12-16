@@ -1,8 +1,6 @@
 ﻿import * as cdk from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
@@ -12,8 +10,7 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   githubOrg: string;
   githubRepo: string;
   stage: 'dev' | 'prod';
-  identityCenterRoleArn: string;
-  ssoInstanceArn: string;
+  targetRoleArn: string;
 }
 
 export class DbAccessorStack extends cdk.Stack {
@@ -31,63 +28,11 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
-    const iamGrantReadOnlyAccessFn = createLambda(this, projectName, 'grant-read-only-access', 'iam', {
+    const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: table.tableName,
+      TARGET_ROLE_ARN: props.targetRoleArn,
     });
-    table.grantWriteData(iamGrantReadOnlyAccessFn);
-    iamGrantReadOnlyAccessFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:CreatePolicy', 'iam:TagPolicy'],
-        resources: ['arn:aws:iam::*:policy/*'],
-      }),
-    );
-    iamGrantReadOnlyAccessFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:AttachUserPolicy', 'iam:GetUser'],
-        resources: ['arn:aws:iam::*:user/*'],
-      }),
-    );
-
-    const ssoGrantReadOnlyAccessFn = createLambda(this, projectName, 'grant-read-only-access', 'sso', {
-      AUDIT_LOGS_TABLE_NAME: table.tableName,
-      IDENTITY_CENTER_ROLE_ARN: props.identityCenterRoleArn,
-    });
-    table.grantWriteData(ssoGrantReadOnlyAccessFn);
-    ssoGrantReadOnlyAccessFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['sts:AssumeRole'],
-        resources: [props.identityCenterRoleArn],
-      }),
-    );
-
-    const iamGetActivePoliciesFn = createLambda(this, projectName, 'get-active-policies', 'iam', {
-      TABLE_NAME: table.tableName,
-    });
-
-    iamGetActivePoliciesFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:ListPolicies', 'iam:ListPolicyTags'],
-        resources: ['arn:aws:iam::*:policy/*'],
-      }),
-    );
-
-    const ssoGetActivePoliciesFn = createLambda(this, projectName, 'get-active-policies', 'sso', {
-      TABLE_NAME: table.tableName,
-      IDENTITY_CENTER_ROLE_ARN: props.identityCenterRoleArn,
-      INSTANCE_ARN: props.ssoInstanceArn,
-    });
-    ssoGetActivePoliciesFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['sts:AssumeRole'],
-        resources: [props.identityCenterRoleArn],
-      }),
-    );
-
+    table.grantWriteData(getRecordFn);
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -100,45 +45,13 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const iamAccess = api.root.addResource('iam').addResource('access');
+    const iamAccess = api.root.addResource('record');
     iamAccess.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
     });
-    iamAccess.addMethod('POST', new apigw.LambdaIntegration(iamGrantReadOnlyAccessFn));
-    iamAccess.addMethod('GET', new apigw.LambdaIntegration(iamGetActivePoliciesFn));
-
-    const ssoAccess = api.root.addResource('sso').addResource('access');
-    ssoAccess.addCorsPreflight({
-      allowOrigins: apigw.Cors.ALL_ORIGINS,
-      allowMethods: ['OPTIONS', 'POST', 'GET'],
-    });
-    ssoAccess.addMethod('POST', new apigw.LambdaIntegration(ssoGrantReadOnlyAccessFn));
-    ssoAccess.addMethod('GET', new apigw.LambdaIntegration(ssoGetActivePoliciesFn));
-
-    const deleteExpiredPoliciesFn = createLambda(this, projectName, 'delete-expired-policies', 'iam', {
-      TABLE_NAME: table.tableName,
-    });
-
-    deleteExpiredPoliciesFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:ListPolicies', 'iam:ListPolicyTags', 'iam:DeletePolicy'],
-        resources: ['arn:aws:iam::*:policy/*'],
-      }),
-    );
-    deleteExpiredPoliciesFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['iam:DetachUserPolicy'],
-        resources: ['arn:aws:iam::*:user/*'],
-      }),
-    );
-
-    const rule = new events.Rule(this, 'InvocationLevelRule', {
-      schedule: events.Schedule.cron({ minute: '0', hour: '0' }),
-    });
-    rule.addTarget(new targets.LambdaFunction(deleteExpiredPoliciesFn));
+    // iamAccess.addMethod('POST', new apigw.LambdaIntegration(iamGrantReadOnlyAccessFn));
+    iamAccess.addMethod('GET', new apigw.LambdaIntegration(getRecordFn));
 
     // --- OIDC provider (imported) ---
     const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(

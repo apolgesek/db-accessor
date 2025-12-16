@@ -7,13 +7,12 @@ export function createLambda(
   scope: Construct,
   projectName: string,
   fnName: string,
-  type: 'iam' | 'sso',
   environment: Record<string, string>,
 ) {
   const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
 
-  const functionName = `${projectName}-${type}-${fnName}`;
-  const entry = path.join(__dirname, '..', '..', 'src', 'functions', fnName.replaceAll('-', '_'), type, 'main.ts');
+  const functionName = `${projectName}-${fnName}`;
+  const entry = path.join(__dirname, '..', '..', 'src', 'functions', fnName.replaceAll('-', '_'), 'main.ts');
 
   return new nodejs.NodejsFunction(scope, functionName, {
     functionName,
