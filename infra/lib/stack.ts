@@ -33,6 +33,14 @@ export class DbAccessorStack extends cdk.Stack {
       TARGET_ROLE_ARN: props.targetRoleArn,
     });
     table.grantWriteData(getRecordFn);
+    getRecordFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: [props.targetRoleArn],
+      }),
+    );
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
