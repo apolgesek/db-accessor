@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
-import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { Creds } from '../../types/creds';
+import { redact } from './apply-mask';
 
 const TARGET_ROLE_ARN = process.env.TARGET_ROLE_ARN!;
 
@@ -27,12 +29,24 @@ async function getMgmtCreds() {
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const creds = await getMgmtCreds();
-    const ddb = new DynamoDBClient({
+    const ra = new RecordAccessor(creds);
+
+    return ra.getRecord(event, context);
+  }
+}
+
+class RecordAccessor {
+  private targetDbClient: DynamoDBClient;
+  private readonly localDbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+
+  constructor(creds: Creds) {
+    this.targetDbClient = new DynamoDBClient({
       region: process.env.AWS_REGION,
       credentials: creds,
     });
-    const dynamoDbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+  }
 
+  async getRecord(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const pk = 'CUST#10001';
     const sk = 'PROFILE#10001';
     const PK_NAME = 'PK';
@@ -47,7 +61,7 @@ class LambdaHandler {
       key[SK_NAME] = { S: sk };
     }
 
-    const resp = await ddb.send(
+    const resp = await this.targetDbClient.send(
       new GetItemCommand({
         TableName: TABLE_NAME,
         Key: key,
@@ -67,10 +81,36 @@ class LambdaHandler {
       },
     };
 
-    await dynamoDbClient.send(new PutItemCommand(params));
+    await this.localDbClient.send(new PutItemCommand(params));
 
-    const item = unmarshall(resp.Item);
+    let item = unmarshall(resp.Item);
+    const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
+    if (maskRuleset) {
+      item = redact(
+        item,
+        maskRuleset.rules.map((r) => r.path),
+      );
+    }
+
     return APIResponse.success(item);
+  }
+
+  async findMaskRuleset(TABLE_NAME: string, item: Record<string, any>) {
+    return Promise.resolve({
+      rulesetId: 1,
+      version: 1,
+      rules: [
+        {
+          path: 'personalData.email',
+        },
+        {
+          path: 'personalData.phone',
+        },
+        {
+          path: 'addresses[*].street',
+        },
+      ],
+    });
   }
 }
 

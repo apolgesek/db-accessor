@@ -20,7 +20,7 @@ export class DbAccessorStack extends cdk.Stack {
     const projectName = props.projectName + '-' + props.stage;
     const ghOidcProviderArn = `arn:aws:iam::${stack.account}:oidc-provider/token.actions.githubusercontent.com`;
 
-    const table = new dynamodb.Table(this, 'AuditLogTable', {
+    const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
       partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'CreatedAt', type: dynamodb.AttributeType.NUMBER },
@@ -28,11 +28,21 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    const grantTable = new dynamodb.Table(this, `${projectName}-grants`, {
+      tableName: `${projectName}-grants`,
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
+    });
+
     const getRecordFn = createLambda(this, projectName, 'get-record', {
-      AUDIT_LOGS_TABLE_NAME: table.tableName,
+      AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
       TARGET_ROLE_ARN: props.targetRoleArn,
     });
-    table.grantWriteData(getRecordFn);
+    auditTable.grantWriteData(getRecordFn);
+    grantTable.grantReadData(getRecordFn);
+
     getRecordFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
