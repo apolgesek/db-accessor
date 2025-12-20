@@ -17,7 +17,6 @@ env:
   STAGE: dev
   AWS_REGION: eu-central-1
   CDK_ROLE_TO_ASSUME_ARN: ${{ vars.CDK_ROLE_TO_ASSUME_ARN }}
-  TARGET_ROLE_ARN: ${{ vars.TARGET_ROLE_ARN }}
 
 jobs:
   changes:
