@@ -7,14 +7,13 @@ import { APIResponse } from '../../shared/response';
 import { Creds } from '../../types/creds';
 import { redact } from './apply-mask';
 
-const TARGET_ROLE_ARN = process.env.TARGET_ROLE_ARN!;
-
 const sts = new STSClient({ region: process.env.AWS_REGION });
 
 async function getMgmtCreds() {
   const res = await sts.send(
     new AssumeRoleCommand({
-      RoleArn: TARGET_ROLE_ARN,
+      // todo: fetch from lambda execution role policy and pass in request
+      RoleArn: 'arn:aws:iam::058264309711:role/DbAccessorAppRole',
       RoleSessionName: `GetDbRecordSession_${Date.now()}`,
     }),
   );
@@ -101,13 +100,13 @@ class RecordAccessor {
       version: 1,
       rules: [
         {
-          path: 'personalData.email',
+          path: 'personalDetails.email',
         },
         {
-          path: 'personalData.phone',
+          path: 'personalDetails.phone',
         },
         {
-          path: 'addresses[*].street',
+          path: 'addresses[*].line1',
         },
       ],
     });

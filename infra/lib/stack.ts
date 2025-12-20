@@ -10,7 +10,6 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   githubOrg: string;
   githubRepo: string;
   stage: 'dev' | 'prod';
-  targetRoleArn: string;
 }
 
 export class DbAccessorStack extends cdk.Stack {
@@ -38,7 +37,6 @@ export class DbAccessorStack extends cdk.Stack {
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
-      TARGET_ROLE_ARN: props.targetRoleArn,
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
@@ -47,7 +45,7 @@ export class DbAccessorStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['sts:AssumeRole'],
-        resources: [props.targetRoleArn],
+        resources: ['arn:aws:iam::058264309711:role/DbAccessorAppRole'],
       }),
     );
 
@@ -141,4 +139,4 @@ export class DbAccessorStack extends cdk.Stack {
   }
 }
 
-// refresh
+// refresh 1
