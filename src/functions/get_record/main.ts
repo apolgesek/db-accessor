@@ -5,7 +5,7 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { Creds } from '../../types/creds';
-import { redact } from './apply-mask';
+import { redactByPathPatterns } from './apply-mask';
 
 const sts = new STSClient({ region: process.env.AWS_REGION });
 
@@ -85,13 +85,13 @@ class RecordAccessor {
     let item = unmarshall(resp.Item);
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
     if (maskRuleset) {
-      item = redact(
+      item = redactByPathPatterns(
         item,
         maskRuleset.rules.map((r) => r.path),
       );
     }
 
-    return APIResponse.success(item);
+    return APIResponse.success({ item, maskRuleset });
   }
 
   async findMaskRuleset(TABLE_NAME: string, item: Record<string, any>) {
@@ -106,7 +106,7 @@ class RecordAccessor {
           path: 'personalDetails.phone',
         },
         {
-          path: 'addresses[*].line1',
+          path: 'addresses[].line1',
         },
       ],
     });

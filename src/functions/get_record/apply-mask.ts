@@ -1,17 +1,20 @@
 const DEFAULT_REDACTION = '<redacted>';
 
 /**
- * Redact fields matching path patterns (supports * and [*]).
+ * Redact fields matching path patterns (supports * and []).
  *
  * Pattern syntax:
  * - Dot-separated segments: "a.b.c"
- * - "*" matches any property name at that level (and any array index if current node is array)
- * - "[*]" matches any array index
+ * - "*" matches any property name at that level
+ * - "[]" matches any array index
  * - "[0]" matches a specific array index
  *
- * Note: Assumes JSON-like data (no cycles). Includes a WeakSet guard for safety.
+ * Examples:
+ * - "contacts[].email"
+ * - "orders[0].customer.email"
+ * - "payments.*.cardNumber"
  */
-export function redact<T>(
+export function redactByPathPatterns<T>(
   input: T,
   patterns: readonly string[],
   redactionText: string = DEFAULT_REDACTION,
@@ -26,10 +29,8 @@ export function redact<T>(
 
   function apply(node: any, active: TrieNode[]) {
     if (node == null) return;
-
     if (typeof node !== 'object') return;
 
-    // cycle guard (won't fully support shared refs with different masks, but prevents infinite loops)
     if (seen.has(node)) return;
     seen.add(node);
 
@@ -47,7 +48,6 @@ export function redact<T>(
       return;
     }
 
-    // object
     for (const [key, value] of Object.entries(node)) {
       const nextActive = nextForObjectKey(active, key);
       if (nextActive.length === 0) continue;
@@ -77,17 +77,13 @@ export function redact<T>(
     const idxTok = `[${index}]`;
 
     for (const n of active) {
-      // explicit index
+      // explicit index: [0], [1], ...
       const exactIdx = n.children.get(idxTok);
       if (exactIdx) next.push(exactIdx);
 
-      // any index
-      const anyIdx = n.children.get('[*]');
+      // any index: []
+      const anyIdx = n.children.get('[]');
       if (anyIdx) next.push(anyIdx);
-
-      // convenience: treat "*" segment as any index when current node is an array
-      const star = n.children.get('*');
-      if (star) next.push(star);
     }
     return dedupe(next);
   }
@@ -102,7 +98,7 @@ export function redact<T>(
 
 type TrieNode = {
   children: Map<string, TrieNode>;
-  redact: boolean; // if true, redact the value at this node
+  redact: boolean;
 };
 
 function buildTrie(patterns: readonly string[]): TrieNode {
@@ -129,7 +125,7 @@ function buildTrie(patterns: readonly string[]): TrieNode {
 
 /**
  * Examples:
- * - "contacts[*].email" -> ["contacts","[*]","email"]
+ * - "contacts[].email" -> ["contacts","[]","email"]
  * - "orders[0].customer.email" -> ["orders","[0]","customer","email"]
  * - "payments.*.cardNumber" -> ["payments","*","cardNumber"]
  */
@@ -145,7 +141,7 @@ function tokenizePath(pattern: string): string[] {
     const m = part.match(/^[^\[]+/);
     if (m?.[0]) tokens.push(m[0]);
 
-    // bracket tokens like [*] or [0]
+    // bracket tokens like [] or [0]
     const brackets = part.match(/\[[^\]]*\]/g);
     if (brackets) tokens.push(...brackets);
   }
