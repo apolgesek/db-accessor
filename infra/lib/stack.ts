@@ -2,13 +2,16 @@
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
+import { Stack } from 'aws-cdk-lib';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
   githubOrg: string;
   githubRepo: string;
+  existingUserPoolId: string;
   stage: 'dev' | 'prod';
 }
 
@@ -130,6 +133,48 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
+    const preSignUpFn = createLambda(this, projectName, 'pre-token-generation');
+
+    preSignUpFn.addPermission('AllowCognitoInvokeImported', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: Stack.of(this).formatArn({
+        service: 'cognito-idp',
+        resource: 'userpool',
+        resourceName: props.existingUserPoolId,
+      }),
+    });
+
+    new cr.AwsCustomResource(this, 'UpdateUserPoolLambdaConfig', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: props.existingUserPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignUpFn.functionArn,
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
+      },
+      onUpdate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: props.existingUserPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignUpFn.functionArn,
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:UpdateUserPool'],
+          resources: ['*'], // tighten if you prefer
+        }),
+      ]),
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
 
     new cdk.CfnOutput(this, 'GitHubCdkRoleArn', {
@@ -138,5 +183,3 @@ export class DbAccessorStack extends cdk.Stack {
     });
   }
 }
-
-// refresh 1
