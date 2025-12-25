@@ -7,7 +7,7 @@ export function createLambda(
   scope: Construct,
   projectName: string,
   fnName: string,
-  environment: Record<string, string>,
+  environment?: Record<string, string>,
 ) {
   const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
 
