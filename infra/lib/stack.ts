@@ -133,9 +133,9 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const preSignUpFn = createLambda(this, projectName, 'pre-token-generation');
+    const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
-    preSignUpFn.addPermission('AllowCognitoInvokeImported', {
+    preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
       principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
       sourceArn: Stack.of(this).formatArn({
         service: 'cognito-idp',
@@ -151,7 +151,11 @@ export class DbAccessorStack extends cdk.Stack {
         parameters: {
           UserPoolId: props.existingUserPoolId,
           LambdaConfig: {
-            PreTokenGeneration: preSignUpFn.functionArn,
+            PreTokenGeneration: preTokenGenerationFn.functionArn,
+            PreTokenGenerationConfig: {
+              LambdaArn: preTokenGenerationFn.functionArn,
+              LambdaVersion: 'V3_0',
+            },
           },
         },
         physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
@@ -162,7 +166,11 @@ export class DbAccessorStack extends cdk.Stack {
         parameters: {
           UserPoolId: props.existingUserPoolId,
           LambdaConfig: {
-            PreTokenGeneration: preSignUpFn.functionArn,
+            PreTokenGeneration: preTokenGenerationFn.functionArn,
+            PreTokenGenerationConfig: {
+              LambdaArn: preTokenGenerationFn.functionArn,
+              LambdaVersion: 'V3_0',
+            },
           },
         },
         physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
