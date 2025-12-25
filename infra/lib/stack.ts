@@ -151,7 +151,7 @@ export class DbAccessorStack extends cdk.Stack {
         parameters: {
           UserPoolId: props.existingUserPoolId,
           LambdaConfig: {
-            PreSignUp: preSignUpFn.functionArn,
+            PreTokenGeneration: preSignUpFn.functionArn,
           },
         },
         physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
@@ -162,7 +162,7 @@ export class DbAccessorStack extends cdk.Stack {
         parameters: {
           UserPoolId: props.existingUserPoolId,
           LambdaConfig: {
-            PreSignUp: preSignUpFn.functionArn,
+            PreTokenGeneration: preSignUpFn.functionArn,
           },
         },
         physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
