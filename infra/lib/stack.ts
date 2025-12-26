@@ -11,7 +11,8 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
   githubOrg: string;
   githubRepo: string;
-  existingUserPoolId: string;
+  cognitoUserPoolId: string;
+  cognitoClientId: string;
   stage: 'dev' | 'prod';
 }
 
@@ -52,6 +53,13 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
+    const createRequestFn = createLambda(this, projectName, 'create-request', {
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
+    });
+    grantTable.grantWriteData(createRequestFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -64,13 +72,69 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const iamAccess = api.root.addResource('record');
-    iamAccess.addCorsPreflight({
+    const record = api.root.addResource('record');
+    record.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
     });
-    // iamAccess.addMethod('POST', new apigw.LambdaIntegration(iamGrantReadOnlyAccessFn));
-    iamAccess.addMethod('GET', new apigw.LambdaIntegration(getRecordFn));
+    record.addMethod('GET', new apigw.LambdaIntegration(getRecordFn));
+
+    const request = api.root.addResource('request');
+    request.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST', 'GET'],
+    });
+    request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
+
+    const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
+
+    preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: Stack.of(this).formatArn({
+        service: 'cognito-idp',
+        resource: 'userpool',
+        resourceName: props.cognitoUserPoolId,
+      }),
+    });
+
+    new cr.AwsCustomResource(this, 'UpdateUserPoolLambdaConfig', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: props.cognitoUserPoolId,
+          LambdaConfig: {
+            PreTokenGeneration: preTokenGenerationFn.functionArn,
+            PreTokenGenerationConfig: {
+              LambdaArn: preTokenGenerationFn.functionArn,
+              LambdaVersion: 'V3_0',
+            },
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${props.cognitoUserPoolId}-LambdaConfig`),
+      },
+      onUpdate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: props.cognitoUserPoolId,
+          LambdaConfig: {
+            PreTokenGeneration: preTokenGenerationFn.functionArn,
+            PreTokenGenerationConfig: {
+              LambdaArn: preTokenGenerationFn.functionArn,
+              LambdaVersion: 'V3_0',
+            },
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of(`${props.cognitoUserPoolId}-LambdaConfig`),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:UpdateUserPool'],
+          resources: ['*'], // tighten if you prefer
+        }),
+      ]),
+    });
 
     // --- OIDC provider (imported) ---
     const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
@@ -132,56 +196,6 @@ export class DbAccessorStack extends cdk.Stack {
         resources: [bootstrapVersionParamArn],
       }),
     );
-
-    const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
-
-    preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
-      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
-      sourceArn: Stack.of(this).formatArn({
-        service: 'cognito-idp',
-        resource: 'userpool',
-        resourceName: props.existingUserPoolId,
-      }),
-    });
-
-    new cr.AwsCustomResource(this, 'UpdateUserPoolLambdaConfig', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: props.existingUserPoolId,
-          LambdaConfig: {
-            PreTokenGeneration: preTokenGenerationFn.functionArn,
-            PreTokenGenerationConfig: {
-              LambdaArn: preTokenGenerationFn.functionArn,
-              LambdaVersion: 'V3_0',
-            },
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
-      },
-      onUpdate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: props.existingUserPoolId,
-          LambdaConfig: {
-            PreTokenGeneration: preTokenGenerationFn.functionArn,
-            PreTokenGenerationConfig: {
-              LambdaArn: preTokenGenerationFn.functionArn,
-              LambdaVersion: 'V3_0',
-            },
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-LambdaConfig`),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:UpdateUserPool'],
-          resources: ['*'], // tighten if you prefer
-        }),
-      ]),
-    });
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
 

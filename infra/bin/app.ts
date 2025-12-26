@@ -13,5 +13,6 @@ new DbAccessorStack(app, 'DbAccessorStack', {
   projectName: 'db-accessor',
   githubOrg: 'apolgesek',
   githubRepo: 'db-accessor',
-  existingUserPoolId: 'eu-central-1_6rLj50DRM',
+  cognitoUserPoolId: 'eu-central-1_6rLj50DRM',
+  cognitoClientId: '6n5d5gru7c0ncf5npa0m5ls2n8',
 });
