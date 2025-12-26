@@ -3,11 +3,11 @@ import { APIGatewayProxyResult } from 'aws-lambda';
 const CORS_HEADER = { 'Access-Control-Allow-Origin': '*' };
 
 export class APIResponse {
-  static success<T>(data: T): APIGatewayProxyResult;
-  static success(message: string): APIGatewayProxyResult;
-  static success<T>(dataOrMessage: T | string): APIGatewayProxyResult {
+  static success<T>(statusCode: number, data: T): APIGatewayProxyResult;
+  static success(statusCode: number, message: string): APIGatewayProxyResult;
+  static success<T>(statusCode: number, dataOrMessage: T | string): APIGatewayProxyResult {
     return {
-      statusCode: 200,
+      statusCode,
       headers: CORS_HEADER,
       body: JSON.stringify(typeof dataOrMessage === 'string' ? { message: dataOrMessage } : dataOrMessage),
     };
