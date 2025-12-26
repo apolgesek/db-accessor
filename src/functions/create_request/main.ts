@@ -2,6 +2,7 @@ import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { requestSchema } from './request-schema';
+import { APIResponse } from '../../shared/response';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -22,7 +23,7 @@ class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
-      return { statusCode: 401, body: 'Missing token' };
+      return APIResponse.error(401, 'Missing token');
     }
 
     try {
@@ -30,20 +31,14 @@ class LambdaHandler {
 
       const authorizationHeader = event.headers.Authorization || event.headers.authorization;
       if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
-        return {
-          statusCode: 401,
-          body: JSON.stringify({ message: 'Unauthorized' }),
-        };
+        return APIResponse.error(401, 'Unauthorized');
       }
 
       const body = JSON.parse(event.body || '{}');
       const result = requestSchema.validate(body);
 
       if (result.error) {
-        return {
-          statusCode: 400,
-          body: JSON.stringify({ message: 'Invalid request', details: result.error.details }),
-        };
+        return APIResponse.error(400, 'Invalid request');
       }
 
       const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
@@ -71,13 +66,10 @@ class LambdaHandler {
 
       await ddbClient.send(createNewRequestCommand);
 
-      return {
-        statusCode: 201,
-        body: JSON.stringify({ id: `REQUEST#${dateNow}` }),
-      };
+      return APIResponse.success(201, { id: `REQUEST#${dateNow}` });
     } catch (err) {
       console.error('Token verification failed:', err);
-      return { statusCode: 401, body: 'Invalid token' };
+      return APIResponse.error(401, 'Invalid token');
     }
   }
 }

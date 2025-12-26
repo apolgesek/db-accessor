@@ -91,7 +91,7 @@ class RecordAccessor {
       );
     }
 
-    return APIResponse.success({ item, maskRuleset });
+    return APIResponse.success(200, { item, maskRuleset });
   }
 
   async findMaskRuleset(TABLE_NAME: string, item: Record<string, any>) {
