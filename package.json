@@ -16,7 +16,8 @@
     "@aws-sdk/client-sts": "^3.948.0",
     "@aws-sdk/util-dynamodb": "^3.952.0",
     "aws-jwt-verify": "^5.1.1",
-    "esbuild": "^0.14.14"
+    "esbuild": "^0.14.14",
+    "joi": "^18.0.2"
   },
   "devDependencies": {
     "@jest/globals": "^29.2.0",

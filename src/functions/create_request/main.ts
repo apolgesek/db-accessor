@@ -1,6 +1,7 @@
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { requestSchema } from './request-schema';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -26,7 +27,6 @@ class LambdaHandler {
 
     try {
       const claims = await verifier.verify(token);
-      console.log('Token is valid. Claims:', claims);
 
       const authorizationHeader = event.headers.Authorization || event.headers.authorization;
       if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
@@ -36,35 +36,44 @@ class LambdaHandler {
         };
       }
 
-      // const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-      // const dateNow = Date.now();
-      // // Implementation for creating a request goes here
-      // const createNewRequestCommand = new PutItemCommand({
-      //   TableName: process.env.GRANTS_TABLE_NAME,
-      //   Item: {
-      //     PK: { S: `USER#apolgesek-test` },
-      //     SK: { S: `REQUEST#${dateNow}` },
-      //     userId: { S: 'apolgesek-test' },
-      //     status: { S: 'PENDING' },
-      //     createdAt: { S: new Date(dateNow).toISOString() },
-      //     accountId: { S: '058264309711' },
-      //     table: { S: 'dummy' },
-      //     region: { S: 'eu-central-1' },
-      //     duration: { N: '12' },
-      //     targetPK: { S: 'CUST#10001' },
-      //     targetSK: { S: 'PROFILE#10001' },
-      //     approvedBy: { L: [] },
-      //     reason: { S: 'Need access for testing' },
-      //     rejectionReason: { S: '' },
-      //     firstAccessedAt: { S: '' },
-      //   },
-      // });
+      const body = JSON.parse(event.body || '{}');
+      const result = requestSchema.validate(body);
 
-      // await ddbClient.send(createNewRequestCommand);
+      if (result.error) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ message: 'Invalid request', details: result.error.details }),
+        };
+      }
+
+      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+      const dateNow = Date.now();
+
+      const username = claims.username.split('db-accessor_')[1];
+      const createNewRequestCommand = new PutItemCommand({
+        TableName: process.env.GRANTS_TABLE_NAME,
+        Item: {
+          PK: { S: `USER#${username}` },
+          SK: { S: `REQUEST#${dateNow}` },
+          userId: { S: username },
+          status: { S: 'PENDING' },
+          createdAt: { S: new Date(dateNow).toISOString() },
+          accountId: { S: result.value.accountId },
+          table: { S: result.value.table },
+          region: { S: result.value.region },
+          duration: { N: result.value.duration.toString() },
+          targetPK: { S: result.value.targetPK },
+          targetSK: { S: result.value.targetSK },
+          approvedBy: { L: [] },
+          reason: { S: result.value.reason },
+        },
+      });
+
+      await ddbClient.send(createNewRequestCommand);
 
       return {
         statusCode: 201,
-        body: JSON.stringify({ message: 'Request created successfully' }),
+        body: JSON.stringify({ id: `REQUEST#${dateNow}` }),
       };
     } catch (err) {
       console.error('Token verification failed:', err);
