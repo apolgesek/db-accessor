@@ -60,6 +60,13 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantWriteData(createRequestFn);
 
+    const getRequestFn = createLambda(this, projectName, 'get-request', {
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
+    });
+    grantTable.grantReadData(getRequestFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -85,6 +92,7 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'POST', 'GET'],
     });
     request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
+    request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn));
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
