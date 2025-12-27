@@ -3,21 +3,13 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { requestSchema } from './request-schema';
 import { APIResponse } from '../../shared/response';
+import { getBearerToken } from '../../shared/get-bearer-token';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
   tokenUse: 'access',
   clientId: process.env.COGNITO_CLIENT_ID as string,
 });
-
-function getBearerToken(event: APIGatewayProxyEvent): string | null {
-  const h = event.headers || {};
-  const auth = h.Authorization || h.authorization;
-  if (!auth) return null;
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-
-  return m ? m[1] : null;
-}
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
@@ -43,13 +35,15 @@ class LambdaHandler {
 
       const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
       const dateNow = Date.now();
+      const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
 
       const username = claims.username.split('db-accessor_')[1];
+      const requestId = crypto.randomUUID();
       const createNewRequestCommand = new PutItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Item: {
           PK: { S: `USER#${username}` },
-          SK: { S: `REQUEST#${dateNow}` },
+          SK: { S: `REQUEST#${dateNow}#${requestId}` },
           userId: { S: username },
           status: { S: 'PENDING' },
           createdAt: { S: new Date(dateNow).toISOString() },
@@ -61,6 +55,10 @@ class LambdaHandler {
           targetSK: { S: result.value.targetSK },
           approvedBy: { L: [] },
           reason: { S: result.value.reason },
+          GSI_ALL_PK: { S: `REQBUCKET${yearMonth}` },
+          GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+          GSI_PENDING_PK: { S: 'PENDING' },
+          GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
         },
       });
 

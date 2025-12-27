@@ -39,6 +39,12 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    grantTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_ALL',
+      partitionKey: { name: 'GSI_ALL_PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI_ALL_SK', type: dynamodb.AttributeType.STRING },
+    });
+
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
     });
@@ -67,6 +73,13 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantReadData(getRequestFn);
 
+    const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', {
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
+    });
+    grantTable.grantReadData(adminGetRequestFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -93,6 +106,12 @@ export class DbAccessorStack extends cdk.Stack {
     });
     request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
     request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn));
+    const adminRequest = request.addResource('admin').addResource('request');
+    adminRequest.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'GET'],
+    });
+    adminRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn));
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
