@@ -80,6 +80,13 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantReadData(adminGetRequestFn);
 
+    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
+    });
+    grantTable.grantWriteData(adminApproveRequestFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -107,12 +114,20 @@ export class DbAccessorStack extends cdk.Stack {
     request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
     request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn));
 
-    const adminRequest = api.root.addResource('admin').addResource('request');
-    adminRequest.addCorsPreflight({
+    const adminResource = api.root.addResource('admin');
+    const adminGetRequest = adminResource.addResource('request');
+    adminGetRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'GET'],
     });
-    adminRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn));
+    adminGetRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn));
+
+    const adminApproveRequest = adminResource.addResource('approve-request');
+    adminApproveRequest.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST'],
+    });
+    adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn));
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
