@@ -23,8 +23,7 @@ class LambdaHandler {
       const claims = await verifier.verify(token);
       const app_roles = claims['app_roles'] as string[] | undefined;
 
-      const authorizationHeader = event.headers.Authorization || event.headers.authorization;
-      if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ') || !app_roles?.includes('ADMIN')) {
+      if (!app_roles?.includes('ADMIN')) {
         return APIResponse.error(401, 'Unauthorized');
       }
 

@@ -106,7 +106,8 @@ export class DbAccessorStack extends cdk.Stack {
     });
     request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
     request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn));
-    const adminRequest = request.addResource('admin').addResource('request');
+
+    const adminRequest = api.root.addResource('admin').addResource('request');
     adminRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'GET'],
