@@ -5,6 +5,7 @@ import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { monthsBetween } from './months-between.util';
 import { getBearerToken } from '../../shared/get-bearer-token';
+import { requestSchema } from './request-schema';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -27,21 +28,29 @@ class LambdaHandler {
         return APIResponse.error(401, 'Unauthorized');
       }
 
+      const body = JSON.parse(event.body || '{}');
+      const result = requestSchema.validate(body);
+
+      if (result.error) {
+        return APIResponse.error(400, 'Invalid request');
+      }
+
       const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 
       const items = [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let lastEvaluatedKey: Record<string, any> | undefined;
 
-      const months = monthsBetween(new Date('2025-12-01'), new Date('2025-12-31'));
+      const months = monthsBetween(new Date(result.value.startDate), new Date(result.value.endDate));
 
       for (const timeRange of months) {
         do {
           const cmd = new QueryCommand({
             TableName: process.env.GRANTS_TABLE_NAME,
+            IndexName: 'GSI_ALL',
             KeyConditionExpression: '#pk = :pk',
             ExpressionAttributeNames: {
-              '#pk': 'PK',
+              '#pk': 'GSI_ALL_PK',
             },
             ExpressionAttributeValues: {
               ':pk': { S: `REQBUCKET#${timeRange}` },
