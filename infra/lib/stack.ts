@@ -48,8 +48,7 @@ export class DbAccessorStack extends cdk.Stack {
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
     });
-    auditTable.grantWriteData(getRecordFn);
-    grantTable.grantReadData(getRecordFn);
+    auditTable.grantReadWriteData(getRecordFn);
 
     getRecordFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -85,7 +84,7 @@ export class DbAccessorStack extends cdk.Stack {
       COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
       COGNITO_CLIENT_ID: props.cognitoClientId,
     });
-    grantTable.grantWriteData(adminApproveRequestFn);
+    grantTable.grantReadWriteData(adminApproveRequestFn);
 
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
