@@ -3,21 +3,13 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { getBearerToken } from '../../shared/get-bearer-token';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
   tokenUse: 'access',
   clientId: process.env.COGNITO_CLIENT_ID as string,
 });
-
-function getBearerToken(event: APIGatewayProxyEvent): string | null {
-  const h = event.headers || {};
-  const auth = h.Authorization || h.authorization;
-  if (!auth) return null;
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-
-  return m ? m[1] : null;
-}
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
@@ -28,11 +20,6 @@ class LambdaHandler {
 
     try {
       const claims = await verifier.verify(token);
-
-      const authorizationHeader = event.headers.Authorization || event.headers.authorization;
-      if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) {
-        return APIResponse.error(401, 'Unauthorized');
-      }
 
       const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
       const username = claims.username.split('db-accessor_')[1];
