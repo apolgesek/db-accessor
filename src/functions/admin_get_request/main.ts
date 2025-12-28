@@ -28,15 +28,14 @@ class LambdaHandler {
         return APIResponse.error(401, 'Unauthorized');
       }
 
-      const body = JSON.parse(event.body || '{}');
-      const result = requestSchema.validate(body);
+      const queryParams = event.queryStringParameters || {};
+      const result = requestSchema.validate(queryParams);
 
       if (result.error) {
         return APIResponse.error(400, 'Invalid request');
       }
 
       const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-
       const items = [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let lastEvaluatedKey: Record<string, any> | undefined;
