@@ -57,7 +57,7 @@ class LambdaHandler {
         },
         UpdateExpression: `
             SET #status = :status,
-                #approvedBy = list_append(#approvedBy, :approvedBy),
+                #approvedBy = list_append(#approvedBy, :approvedBy)
             REMOVE #gsi_pending_pk, #gsi_pending_sk
           `,
         ConditionExpression: '#status = :pendingStatus',
