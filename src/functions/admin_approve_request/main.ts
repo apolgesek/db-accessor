@@ -57,14 +57,12 @@ class LambdaHandler {
         },
         UpdateExpression: `
             SET #status = :status,
-                #approvedAt = :approvedAt,
-                #approvedBy = :approvedBy
+                #approvedBy = list_append(#approvedBy, :approvedBy),
             REMOVE #gsi_pending_pk, #gsi_pending_sk
           `,
         ConditionExpression: '#status = :pendingStatus',
         ExpressionAttributeNames: {
           '#status': 'status',
-          '#approvedAt': 'approvedAt',
           '#approvedBy': 'approvedBy',
           '#gsi_pending_pk': 'GSI_PENDING_PK',
           '#gsi_pending_sk': 'GSI_PENDING_SK',
@@ -72,8 +70,13 @@ class LambdaHandler {
         ExpressionAttributeValues: {
           ':pendingStatus': { S: 'PENDING' },
           ':status': { S: 'APPROVED' },
-          ':approvedAt': { S: new Date().toISOString() },
-          ':approvedBy': { S: username },
+          ':approvedBy': {
+            L: [
+              {
+                M: { username: { S: username }, approvedAt: { S: new Date().toISOString() }, role: { S: 'ADMIN' } },
+              },
+            ],
+          },
         },
       });
       await ddbClient.send(updateItemCmd);

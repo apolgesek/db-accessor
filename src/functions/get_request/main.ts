@@ -5,6 +5,8 @@ import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { getBearerToken } from '../../shared/get-bearer-token';
 
+const MS_IN_HOUR = 3_600_000;
+
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
   tokenUse: 'access',
@@ -25,7 +27,7 @@ class LambdaHandler {
       const username = claims.username.split('db-accessor_')[1];
       const pk = `USER#${username}`;
 
-      const items = [];
+      let items = [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let lastEvaluatedKey: Record<string, any> | undefined;
 
@@ -51,6 +53,12 @@ class LambdaHandler {
         lastEvaluatedKey = res.LastEvaluatedKey;
       } while (lastEvaluatedKey);
 
+      const now = Date.now();
+      items = items.map((item) => ({
+        ...item,
+        isAvailable: this.setIsAvailable(item, now),
+      }));
+
       return APIResponse.success(200, {
         userId: username,
         count: items.length,
@@ -60,6 +68,13 @@ class LambdaHandler {
       console.error('Token verification failed:', err);
       return APIResponse.error(401, 'Invalid token');
     }
+  }
+
+  private setIsAvailable(item: any, now: number): boolean {
+    const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
+    return (
+      item.status === 'APPROVED' && new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR < now
+    );
   }
 }
 
