@@ -43,6 +43,8 @@ class LambdaHandler {
       const months = monthsBetween(new Date(result.value.startDate), new Date(result.value.endDate));
 
       for (const timeRange of months) {
+        const rangeItems = [];
+
         do {
           const cmd = new QueryCommand({
             TableName: process.env.GRANTS_TABLE_NAME,
@@ -61,14 +63,14 @@ class LambdaHandler {
           const res = await ddbClient.send(cmd);
 
           for (const it of res.Items ?? []) {
-            items.push(unmarshall(it));
+            rangeItems.push(unmarshall(it));
           }
 
           lastEvaluatedKey = res.LastEvaluatedKey;
         } while (lastEvaluatedKey);
-      }
 
-      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        items.unshift(...rangeItems);
+      }
 
       return APIResponse.success(200, {
         count: items.length,

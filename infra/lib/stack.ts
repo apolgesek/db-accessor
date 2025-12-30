@@ -86,6 +86,13 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantReadWriteData(adminApproveRequestFn);
 
+    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', {
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
+    });
+    grantTable.grantReadWriteData(adminRejectRequestFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -127,6 +134,13 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'POST'],
     });
     adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn));
+
+    const adminRejectRequest = adminResource.addResource('reject-request');
+    adminRejectRequest.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST'],
+    });
+    adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn));
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
