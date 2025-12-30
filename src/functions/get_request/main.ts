@@ -34,6 +34,7 @@ class LambdaHandler {
       do {
         const cmd = new QueryCommand({
           TableName: process.env.GRANTS_TABLE_NAME,
+          ScanIndexForward: false,
           KeyConditionExpression: '#pk = :pk',
           ExpressionAttributeNames: {
             '#pk': 'PK',
@@ -73,7 +74,7 @@ class LambdaHandler {
   private setIsAvailable(item: any, now: number): boolean {
     const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
     return (
-      item.status === 'APPROVED' && new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR < now
+      item.status === 'APPROVED' && new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR >= now
     );
   }
 }

@@ -46,6 +46,7 @@ class LambdaHandler {
         do {
           const cmd = new QueryCommand({
             TableName: process.env.GRANTS_TABLE_NAME,
+            ScanIndexForward: false,
             IndexName: 'GSI_ALL',
             KeyConditionExpression: '#pk = :pk',
             ExpressionAttributeNames: {
@@ -66,6 +67,8 @@ class LambdaHandler {
           lastEvaluatedKey = res.LastEvaluatedKey;
         } while (lastEvaluatedKey);
       }
+
+      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       return APIResponse.success(200, {
         count: items.length,

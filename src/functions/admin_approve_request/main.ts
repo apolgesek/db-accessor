@@ -57,6 +57,7 @@ class LambdaHandler {
         },
         UpdateExpression: `
             SET #status = :status,
+                #comment = :comment,
                 #approvedBy = list_append(#approvedBy, :approvedBy)
             REMOVE #gsi_pending_pk, #gsi_pending_sk
           `,
@@ -66,10 +67,12 @@ class LambdaHandler {
           '#approvedBy': 'approvedBy',
           '#gsi_pending_pk': 'GSI_PENDING_PK',
           '#gsi_pending_sk': 'GSI_PENDING_SK',
+          '#comment': 'comment',
         },
         ExpressionAttributeValues: {
           ':pendingStatus': { S: 'PENDING' },
           ':status': { S: 'APPROVED' },
+          ':comment': { S: body.comment || '' },
           ':approvedBy': {
             L: [
               {
