@@ -105,7 +105,7 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const record = api.root.addResource('record');
+    const record = api.root.addResource('record').addResource('{id}');
     record.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
