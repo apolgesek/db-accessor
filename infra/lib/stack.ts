@@ -48,7 +48,8 @@ export class DbAccessorStack extends cdk.Stack {
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
     });
-    auditTable.grantReadWriteData(getRecordFn);
+    auditTable.grantWriteData(getRecordFn);
+    grantTable.grantReadData(getRecordFn);
 
     getRecordFn.addToRolePolicy(
       new iam.PolicyStatement({

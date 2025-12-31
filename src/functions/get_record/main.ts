@@ -1,13 +1,29 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
-import { Creds } from '../../types/creds';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
+import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import { getBearerToken } from '../../shared/get-bearer-token';
 
 const sts = new STSClient({ region: process.env.AWS_REGION });
+const verifier = CognitoJwtVerifier.create({
+  userPoolId: process.env.COGNITO_USER_POOL_ID as string,
+  tokenUse: 'access',
+  clientId: process.env.COGNITO_CLIENT_ID as string,
+});
+
+function base64urlDecode(str: string): string {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+
+  return Buffer.from(base64, 'base64').toString('utf8');
+}
 
 async function getMgmtCreds() {
   const res = await sts.send(
@@ -26,31 +42,65 @@ async function getMgmtCreds() {
 }
 
 class LambdaHandler {
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const creds = await getMgmtCreds();
-    const ra = new RecordAccessor(creds);
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+    const token = getBearerToken(event);
+    if (!token) {
+      return APIResponse.error(401, 'Missing token');
+    }
 
-    return ra.getRecord(event, context);
+    try {
+      const claims = await verifier.verify(token);
+      const username = claims.username.split('db-accessor_')[1];
+      const pathParams = event.pathParameters || {};
+      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+      const getItemResponse = await ddbClient.send(
+        new GetItemCommand({
+          TableName: process.env.GRANTS_TABLE_NAME,
+          Key: {
+            PK: { S: `USER#${username}` },
+            SK: { S: base64urlDecode(pathParams.id as string) },
+          },
+        }),
+      );
+
+      if (!getItemResponse.Item) {
+        return APIResponse.error(404);
+      }
+
+      const item = unmarshall(getItemResponse.Item);
+      const describeTableResponse = await ddbClient.send(new DescribeTableCommand({ TableName: item.table }));
+
+      if (!describeTableResponse.Table) {
+        return APIResponse.error(400, 'Invalid table');
+      }
+
+      item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
+      item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
+
+      const creds = await getMgmtCreds();
+      const targetDbClient = new DynamoDBClient({
+        region: process.env.AWS_REGION,
+        credentials: creds,
+      });
+      const accessor = new RecordAccessor(ddbClient, targetDbClient);
+
+      return accessor.getRecord(item);
+    } catch (err) {
+      console.error('Token verification failed:', err);
+      return APIResponse.error(401, 'Invalid token');
+    }
   }
 }
 
 class RecordAccessor {
-  private targetDbClient: DynamoDBClient;
-  private readonly localDbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+  constructor(private readonly localDbClient: DynamoDBClient, private readonly targetDbClient: DynamoDBClient) {}
 
-  constructor(creds: Creds) {
-    this.targetDbClient = new DynamoDBClient({
-      region: process.env.AWS_REGION,
-      credentials: creds,
-    });
-  }
-
-  async getRecord(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const pk = 'CUST#10001';
-    const sk = 'PROFILE#10001';
-    const PK_NAME = 'PK';
-    const SK_NAME = 'SK';
-    const TABLE_NAME = 'dummy';
+  async getRecord(request: Record<string, any>): Promise<APIGatewayProxyResult> {
+    const pk = request.targetPK;
+    const sk = request.targetSK;
+    const PK_NAME = request.pkName;
+    const SK_NAME = request.skName;
+    const TABLE_NAME = request.table;
 
     const key: Record<string, any> = {
       [PK_NAME]: { S: pk },
@@ -72,15 +122,18 @@ class RecordAccessor {
       return APIResponse.error(404, 'Not found');
     }
 
-    const params = {
-      TableName: process.env.AUDIT_LOGS_TABLE_NAME,
-      Item: {
-        UserId: { S: 'iam_user' },
-        CreatedAt: { N: new Date().getTime().toString() },
-      },
-    };
-
-    await this.localDbClient.send(new PutItemCommand(params));
+    await this.localDbClient.send(
+      new PutItemCommand({
+        TableName: process.env.AUDIT_LOGS_TABLE_NAME,
+        Item: {
+          UserId: { S: request.userId },
+          CreatedAt: { N: new Date().getTime().toString() },
+          TableName: { S: TABLE_NAME },
+          TargetPK: { S: pk },
+          TargetSK: { S: sk || 'N/A' },
+        },
+      }),
+    );
 
     let item = unmarshall(resp.Item);
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
