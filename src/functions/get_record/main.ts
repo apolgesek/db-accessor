@@ -68,7 +68,13 @@ class LambdaHandler {
       }
 
       const item = unmarshall(getItemResponse.Item);
-      const describeTableResponse = await ddbClient.send(new DescribeTableCommand({ TableName: item.table }));
+      const creds = await getMgmtCreds();
+      const targetDbClient = new DynamoDBClient({
+        region: process.env.AWS_REGION,
+        credentials: creds,
+      });
+
+      const describeTableResponse = await targetDbClient.send(new DescribeTableCommand({ TableName: item.table }));
 
       if (!describeTableResponse.Table) {
         return APIResponse.error(400, 'Invalid table');
@@ -77,11 +83,6 @@ class LambdaHandler {
       item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
       item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
 
-      const creds = await getMgmtCreds();
-      const targetDbClient = new DynamoDBClient({
-        region: process.env.AWS_REGION,
-        credentials: creds,
-      });
       const accessor = new RecordAccessor(ddbClient, targetDbClient);
 
       return accessor.getRecord(item);
