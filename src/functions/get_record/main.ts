@@ -8,6 +8,7 @@ import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { getBearerToken } from '../../shared/get-bearer-token';
 
+const MS_IN_HOUR = 3_600_000;
 const sts = new STSClient({ region: process.env.AWS_REGION });
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -68,6 +69,11 @@ class LambdaHandler {
       }
 
       const item = unmarshall(getItemResponse.Item);
+
+      if (Date.now() > new Date(item.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
+        return APIResponse.error(404);
+      }
+
       const creds = await getMgmtCreds();
       const targetDbClient = new DynamoDBClient({
         region: process.env.AWS_REGION,
