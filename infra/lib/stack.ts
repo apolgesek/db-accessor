@@ -47,6 +47,9 @@ export class DbAccessorStack extends cdk.Stack {
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+      GRANTS_TABLE_NAME: grantTable.tableName,
+      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+      COGNITO_CLIENT_ID: props.cognitoClientId,
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
