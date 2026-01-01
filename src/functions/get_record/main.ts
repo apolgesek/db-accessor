@@ -93,8 +93,8 @@ class LambdaHandler {
 
       return accessor.getRecord(item);
     } catch (err) {
-      console.error('Token verification failed:', err);
-      return APIResponse.error(401, 'Invalid token');
+      console.error('Request failed:', err);
+      return APIResponse.error(401);
     }
   }
 }
@@ -126,7 +126,7 @@ class RecordAccessor {
     );
 
     if (!resp.Item) {
-      return APIResponse.error(404, 'Not found');
+      return APIResponse.error(404);
     }
 
     await this.localDbClient.send(

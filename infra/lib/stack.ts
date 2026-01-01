@@ -45,11 +45,21 @@ export class DbAccessorStack extends cdk.Stack {
       sortKey: { name: 'GSI_ALL_SK', type: dynamodb.AttributeType.STRING },
     });
 
-    const getRecordFn = createLambda(this, projectName, 'get-record', {
-      AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+    grantTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_PENDING',
+      partitionKey: { name: 'GSI_PENDING_PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI_PENDING_SK', type: dynamodb.AttributeType.STRING },
+    });
+
+    const sharedVars = {
       GRANTS_TABLE_NAME: grantTable.tableName,
       COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
       COGNITO_CLIENT_ID: props.cognitoClientId,
+    };
+
+    const getRecordFn = createLambda(this, projectName, 'get-record', {
+      AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+      ...sharedVars,
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
@@ -62,39 +72,15 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const createRequestFn = createLambda(this, projectName, 'create-request', {
-      GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
-    });
+    const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
     grantTable.grantWriteData(createRequestFn);
-
-    const getRequestFn = createLambda(this, projectName, 'get-request', {
-      GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
-    });
+    const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
     grantTable.grantReadData(getRequestFn);
-
-    const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', {
-      GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
-    });
+    const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
     grantTable.grantReadData(adminGetRequestFn);
-
-    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
-      GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
-    });
+    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', sharedVars);
     grantTable.grantReadWriteData(adminApproveRequestFn);
-
-    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', {
-      GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
-    });
+    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', sharedVars);
     grantTable.grantReadWriteData(adminRejectRequestFn);
 
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
