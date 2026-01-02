@@ -55,7 +55,6 @@ class LambdaHandler {
           targetSK: { S: result.value.targetSK },
           approvedBy: { L: [] },
           reason: { S: result.value.reason },
-          comment: { S: '' },
           GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
           GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
           GSI_PENDING_PK: { S: 'PENDING' },
