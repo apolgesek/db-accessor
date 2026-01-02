@@ -1,9 +1,10 @@
-import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { AttributeValue, DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { getBearerToken } from '../../shared/get-bearer-token';
 import { requestSchema } from './request-schema';
+import { unmarshall } from '@aws-sdk/util-dynamodb';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -79,8 +80,10 @@ class LambdaHandler {
         },
       });
       await ddbClient.send(updateItemCmd);
+      const updatedItemResponse = await ddbClient.send(getItemCmd);
+      const updatedItem = unmarshall(updatedItemResponse.Item as Record<string, AttributeValue>);
 
-      return APIResponse.success(204);
+      return APIResponse.success(200, updatedItem);
     } catch (err) {
       console.error('Token verification failed:', err);
       return APIResponse.error(401, 'Invalid token');
