@@ -14,6 +14,8 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 class LambdaHandler {
+  constructor(private readonly ddbClient: DynamoDBClient) {}
+
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
@@ -35,42 +37,8 @@ class LambdaHandler {
         return APIResponse.error(400, 'Invalid request');
       }
 
-      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-      const items = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let lastEvaluatedKey: Record<string, any> | undefined;
-
-      const months = monthsBetween(new Date(result.value.startDate), new Date(result.value.endDate));
-
-      for (const timeRange of months) {
-        const rangeItems = [];
-
-        do {
-          const cmd = new QueryCommand({
-            TableName: process.env.GRANTS_TABLE_NAME,
-            ScanIndexForward: false,
-            IndexName: 'GSI_ALL',
-            KeyConditionExpression: '#pk = :pk',
-            ExpressionAttributeNames: {
-              '#pk': 'GSI_ALL_PK',
-            },
-            ExpressionAttributeValues: {
-              ':pk': { S: `REQBUCKET#${timeRange}` },
-            },
-            ExclusiveStartKey: lastEvaluatedKey,
-          });
-
-          const res = await ddbClient.send(cmd);
-
-          for (const it of res.Items ?? []) {
-            rangeItems.push(unmarshall(it));
-          }
-
-          lastEvaluatedKey = res.LastEvaluatedKey;
-        } while (lastEvaluatedKey);
-
-        items.unshift(...rangeItems);
-      }
+      const items =
+        queryParams.status === 'PENDING' ? await this.getPendingRequests() : await this.getAllRequests(queryParams);
 
       return APIResponse.success(200, {
         count: items.length,
@@ -81,7 +49,77 @@ class LambdaHandler {
       return APIResponse.error(401, 'Invalid token');
     }
   }
+
+  private async getAllRequests(queryParams: any): Promise<any[]> {
+    const items = [];
+    let lastEvaluatedKey: Record<string, any> | undefined;
+
+    const months = monthsBetween(new Date(queryParams.startDate), new Date(queryParams.endDate));
+
+    for (const timeRange of months) {
+      const rangeItems = [];
+
+      do {
+        const cmd = new QueryCommand({
+          TableName: process.env.GRANTS_TABLE_NAME,
+          ScanIndexForward: false,
+          IndexName: 'GSI_ALL',
+          KeyConditionExpression: '#pk = :pk',
+          ExpressionAttributeNames: {
+            '#pk': 'GSI_ALL_PK',
+          },
+          ExpressionAttributeValues: {
+            ':pk': { S: `REQBUCKET#${timeRange}` },
+          },
+          ExclusiveStartKey: lastEvaluatedKey,
+        });
+
+        const res = await this.ddbClient.send(cmd);
+
+        for (const it of res.Items ?? []) {
+          rangeItems.push(unmarshall(it));
+        }
+
+        lastEvaluatedKey = res.LastEvaluatedKey;
+      } while (lastEvaluatedKey);
+
+      items.unshift(...rangeItems);
+    }
+
+    return items;
+  }
+
+  private async getPendingRequests(): Promise<any[]> {
+    const items = [];
+    let lastEvaluatedKey: Record<string, any> | undefined;
+
+    do {
+      const cmd = new QueryCommand({
+        TableName: process.env.GRANTS_TABLE_NAME,
+        ScanIndexForward: false,
+        IndexName: 'GSI_PENDING',
+        KeyConditionExpression: '#pk = :pk',
+        ExpressionAttributeNames: {
+          '#pk': 'GSI_PENDING_PK',
+        },
+        ExpressionAttributeValues: {
+          ':pk': { S: 'PENDING' },
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+      });
+
+      const res = await this.ddbClient.send(cmd);
+
+      for (const it of res.Items ?? []) {
+        items.push(unmarshall(it));
+      }
+
+      lastEvaluatedKey = res.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return items;
+  }
 }
 
-const handlerInstance = new LambdaHandler();
+const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

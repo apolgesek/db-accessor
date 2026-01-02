@@ -30,16 +30,11 @@ function parseFlattenedIdpAttribute(value: string): string[] {
 
 class LambdaHandler {
   async handle(event: PreTokenGenerationV2TriggerEvent, context: Context): Promise<PreTokenGenerationV2TriggerEvent> {
-    console.log('Incoming event:', JSON.stringify(event, null, 2));
-
     const userAttributes = event.request?.userAttributes || {};
     const groupConfig = event.request?.groupConfiguration || {};
 
     const rawIdcGroups = userAttributes['custom:idc_groups'] || '';
     const idcGroupIds = parseFlattenedIdpAttribute(rawIdcGroups);
-
-    console.log('Raw IDC groups:', rawIdcGroups);
-    console.log('Parsed IDC group IDs:', idcGroupIds);
 
     const roleSet = new Set();
 
@@ -51,9 +46,6 @@ class LambdaHandler {
     }
 
     const effectiveGroups = roleSet.size > 0 ? Array.from(roleSet) : groupConfig.groupsToOverride || [];
-
-    console.log('Effective groups (to become cognito:groups):', effectiveGroups);
-
     const groupOverrideDetails: Record<string, any> = {
       groupsToOverride: effectiveGroups,
       iamRolesToOverride: groupConfig.iamRolesToOverride || [],
@@ -80,13 +72,9 @@ class LambdaHandler {
       },
     };
 
-    console.log('Outgoing event:', JSON.stringify(event, null, 2));
-
     return event;
   }
 }
 
 const handlerInstance = new LambdaHandler();
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
-
-// refresh

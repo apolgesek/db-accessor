@@ -14,6 +14,8 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 class LambdaHandler {
+  constructor(private readonly ddbClient: DynamoDBClient) {}
+
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
@@ -23,7 +25,6 @@ class LambdaHandler {
     try {
       const claims = await verifier.verify(token);
 
-      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
       const username = claims.username.split('db-accessor_')[1];
       const pk = `USER#${username}`;
 
@@ -45,7 +46,7 @@ class LambdaHandler {
           ExclusiveStartKey: lastEvaluatedKey,
         });
 
-        const res = await ddbClient.send(cmd);
+        const res = await this.ddbClient.send(cmd);
 
         for (const it of res.Items ?? []) {
           items.push(unmarshall(it));
@@ -79,5 +80,5 @@ class LambdaHandler {
   }
 }
 
-const handlerInstance = new LambdaHandler();
+const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

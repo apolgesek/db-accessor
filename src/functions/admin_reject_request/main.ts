@@ -13,6 +13,8 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 class LambdaHandler {
+  constructor(private readonly ddbClient: DynamoDBClient) {}
+
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
@@ -34,8 +36,6 @@ class LambdaHandler {
         return APIResponse.error(400, 'Invalid request');
       }
 
-      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-
       const getItemCmd = new GetItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
@@ -43,7 +43,7 @@ class LambdaHandler {
           SK: { S: body.SK },
         },
       });
-      const getItemResponse = await ddbClient.send(getItemCmd);
+      const getItemResponse = await this.ddbClient.send(getItemCmd);
 
       if (!getItemResponse.Item) {
         return APIResponse.error(404, 'Record not found');
@@ -79,8 +79,8 @@ class LambdaHandler {
           },
         },
       });
-      await ddbClient.send(updateItemCmd);
-      const updatedItemResponse = await ddbClient.send(getItemCmd);
+      await this.ddbClient.send(updateItemCmd);
+      const updatedItemResponse = await this.ddbClient.send(getItemCmd);
       const updatedItem = unmarshall(updatedItemResponse.Item as Record<string, AttributeValue>);
 
       return APIResponse.success(200, updatedItem);
@@ -91,5 +91,5 @@ class LambdaHandler {
   }
 }
 
-const handlerInstance = new LambdaHandler();
+const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
