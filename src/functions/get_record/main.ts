@@ -32,6 +32,7 @@ async function getMgmtCreds() {
       // todo: fetch from lambda execution role policy and pass in request
       RoleArn: 'arn:aws:iam::058264309711:role/DbAccessorAppRole',
       RoleSessionName: `GetDbRecordSession_${Date.now()}`,
+      DurationSeconds: 900,
     }),
   );
   if (!res.Credentials) throw new Error('AssumeRole returned no credentials');
@@ -43,6 +44,8 @@ async function getMgmtCreds() {
 }
 
 class LambdaHandler {
+  constructor(private readonly ddbClient: DynamoDBClient) {}
+
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
@@ -89,9 +92,22 @@ class LambdaHandler {
       item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
       item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
 
-      const accessor = new RecordAccessor(ddbClient, targetDbClient);
+      const accessor = new RecordAccessor(targetDbClient);
+      const result = await accessor.getRecord(item);
+      await this.ddbClient.send(
+        new PutItemCommand({
+          TableName: process.env.AUDIT_LOGS_TABLE_NAME,
+          Item: {
+            UserId: { S: item.userId },
+            CreatedAt: { N: new Date().getTime().toString() },
+            TableName: { S: item.table },
+            TargetPK: { S: item.targetPK },
+            TargetSK: { S: item.targetSK || 'N/A' },
+          },
+        }),
+      );
 
-      return accessor.getRecord(item);
+      return result;
     } catch (err) {
       console.error('Request failed:', err);
       return APIResponse.error(401);
@@ -100,7 +116,7 @@ class LambdaHandler {
 }
 
 class RecordAccessor {
-  constructor(private readonly localDbClient: DynamoDBClient, private readonly targetDbClient: DynamoDBClient) {}
+  constructor(private readonly targetDbClient: DynamoDBClient) {}
 
   async getRecord(request: Record<string, any>): Promise<APIGatewayProxyResult> {
     const pk = request.targetPK;
@@ -128,19 +144,6 @@ class RecordAccessor {
     if (!resp.Item) {
       return APIResponse.error(404);
     }
-
-    await this.localDbClient.send(
-      new PutItemCommand({
-        TableName: process.env.AUDIT_LOGS_TABLE_NAME,
-        Item: {
-          UserId: { S: request.userId },
-          CreatedAt: { N: new Date().getTime().toString() },
-          TableName: { S: TABLE_NAME },
-          TargetPK: { S: pk },
-          TargetSK: { S: sk || 'N/A' },
-        },
-      }),
-    );
 
     let item = unmarshall(resp.Item);
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
@@ -175,5 +178,5 @@ class RecordAccessor {
   }
 }
 
-const handlerInstance = new LambdaHandler();
+const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

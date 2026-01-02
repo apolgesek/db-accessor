@@ -12,6 +12,8 @@ const verifier = CognitoJwtVerifier.create({
 });
 
 class LambdaHandler {
+  constructor(private readonly ddbClient: DynamoDBClient) {}
+
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const token = getBearerToken(event);
     if (!token) {
@@ -33,7 +35,6 @@ class LambdaHandler {
         return APIResponse.error(400, 'Invalid request');
       }
 
-      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
       const dateNow = Date.now();
       const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
 
@@ -62,7 +63,7 @@ class LambdaHandler {
         },
       });
 
-      await ddbClient.send(createNewRequestCommand);
+      await this.ddbClient.send(createNewRequestCommand);
 
       return APIResponse.success(201, { id: `REQUEST#${dateNow}` });
     } catch (err) {
@@ -72,5 +73,5 @@ class LambdaHandler {
   }
 }
 
-const handlerInstance = new LambdaHandler();
+const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
