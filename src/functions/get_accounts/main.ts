@@ -5,6 +5,7 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { getBearerToken } from '../../shared/get-bearer-token';
 import { APIResponse } from '../../shared/response';
+import { GetParametersByPathCommand, GetParametersByPathCommandOutput, SSMClient } from '@aws-sdk/client-ssm';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -12,6 +13,7 @@ const verifier = CognitoJwtVerifier.create({
   clientId: process.env.COGNITO_CLIENT_ID as string,
 });
 const sts = new STSClient({ region: process.env.AWS_REGION });
+const ssm = new SSMClient({ region: 'us-east-1' });
 
 async function getMgmtCreds() {
   const res = await sts.send(
@@ -40,18 +42,47 @@ class LambdaHandler {
       await verifier.verify(token);
       const creds = await getMgmtCreds();
       const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
-      const response = await this.listAllAccounts(orgClient);
+      const response: any = await this.listAllAccounts(orgClient);
 
       if (process.env.AWS_ACCOUNTS) {
         const allowedAccounts = process.env.AWS_ACCOUNTS.split(',').map((acc) => acc.trim());
-        response.accounts = response.accounts.filter((acct) => allowedAccounts.includes(acct.id as string));
+        response.accounts = response.accounts.filter((acct: any) => allowedAccounts.includes(acct.id as string));
       }
+
+      const regions = await this.listRegionsViaSsm();
+      response.regions = regions;
 
       return APIResponse.success(200, response);
     } catch (err) {
       console.error('Token verification failed:', err);
       return APIResponse.error(401, 'Invalid token');
     }
+  }
+
+  async listRegionsViaSsm() {
+    const path = '/aws/service/global-infrastructure/regions';
+    const regions = [];
+
+    let NextToken;
+    do {
+      const out: GetParametersByPathCommandOutput = await ssm.send(
+        new GetParametersByPathCommand({
+          Path: path,
+          Recursive: true,
+          NextToken,
+          MaxResults: 10,
+        }),
+      );
+
+      for (const p of out.Parameters ?? []) {
+        const region = p.Name?.split('/').pop();
+        if (region) regions.push(region);
+      }
+
+      NextToken = out.NextToken;
+    } while (NextToken);
+
+    return regions.sort();
   }
 
   async listAllAccounts(orgClient: OrganizationsClient) {
