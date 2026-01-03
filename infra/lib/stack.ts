@@ -88,6 +88,13 @@ export class DbAccessorStack extends cdk.Stack {
         resources: [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`],
       }),
     );
+    getAccountsFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['ssm:GetParametersByPath'],
+        resources: ['arn:aws:ssm:us-east-1::parameter/aws/service/global-infrastructure/regions/*'],
+      }),
+    );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
     grantTable.grantWriteData(createRequestFn);
     const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
