@@ -1,11 +1,12 @@
 ﻿import * as cdk from 'aws-cdk-lib';
+import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
-import { Stack } from 'aws-cdk-lib';
+import { parse } from '@aws-sdk/util-arn-parser';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
@@ -64,14 +65,29 @@ export class DbAccessorStack extends cdk.Stack {
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
 
+    const managementAccountId = '058264309711';
+    const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];
+
     getRecordFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['sts:AssumeRole'],
-        resources: ['arn:aws:iam::058264309711:role/DbAccessorAppRole'],
+        resources: assumeRoleArns,
       }),
     );
 
+    const getAccountsFn = createLambda(this, projectName, 'get-accounts', {
+      AWS_MANAGEMENT_ACCOUNT: managementAccountId,
+      AWS_ACCOUNTS: assumeRoleArns.map((arn) => parse(arn).accountId).join(','),
+      ...sharedVars,
+    });
+    getAccountsFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`],
+      }),
+    );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
     grantTable.grantWriteData(createRequestFn);
     const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
@@ -131,6 +147,13 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'POST'],
     });
     adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn));
+
+    const getAccounts = api.root.addResource('accounts');
+    getAccounts.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'GET'],
+    });
+    getAccounts.addMethod('GET', new apigw.LambdaIntegration(getAccountsFn));
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
