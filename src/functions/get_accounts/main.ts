@@ -42,6 +42,11 @@ class LambdaHandler {
       const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
       const response = await this.listAllAccounts(orgClient);
 
+      if (process.env.AWS_ACCOUNTS) {
+        const allowedAccounts = process.env.AWS_ACCOUNTS.split(',').map((acc) => acc.trim());
+        response.accounts = response.accounts.filter((acct) => allowedAccounts.includes(acct.id as string));
+      }
+
       return APIResponse.success(200, response);
     } catch (err) {
       console.error('Token verification failed:', err);
