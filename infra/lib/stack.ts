@@ -92,7 +92,7 @@ export class DbAccessorStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['ssm:GetParametersByPath'],
-        resources: ['arn:aws:ssm:us-east-1::parameter/aws/service/global-infrastructure/regions*'],
+        resources: [`arn:aws:ssm:${process.env.AWS_REGION}::parameter/aws/service/global-infrastructure/regions*`],
       }),
     );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
