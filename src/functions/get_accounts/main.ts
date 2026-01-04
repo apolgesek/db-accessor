@@ -13,7 +13,7 @@ const verifier = CognitoJwtVerifier.create({
   clientId: process.env.COGNITO_CLIENT_ID as string,
 });
 const sts = new STSClient({ region: process.env.AWS_REGION });
-const ssm = new SSMClient({ region: 'us-east-1' });
+const ssm = new SSMClient({ region: process.env.AWS_REGION });
 
 async function getMgmtCreds() {
   const res = await sts.send(
@@ -46,6 +46,7 @@ class LambdaHandler {
 
       const allowedAccounts = process.env.AWS_ACCOUNTS?.split(',').map((acc) => acc.trim());
       const filteredAccounts = accounts.filter((a: any) => allowedAccounts?.includes(a.id as string));
+
       return APIResponse.success(200, { accounts: filteredAccounts, regions });
     } catch (err) {
       console.error('Token verification failed:', err);
