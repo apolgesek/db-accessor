@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { DescribeOrganizationCommand, OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
+import { OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
 import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
@@ -42,17 +42,11 @@ class LambdaHandler {
       await verifier.verify(token);
       const creds = await getMgmtCreds();
       const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
-      const response: any = await this.listAllAccounts(orgClient);
+      const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
 
-      if (process.env.AWS_ACCOUNTS) {
-        const allowedAccounts = process.env.AWS_ACCOUNTS.split(',').map((acc) => acc.trim());
-        response.accounts = response.accounts.filter((acct: any) => allowedAccounts.includes(acct.id as string));
-      }
-
-      const regions = await this.listRegionsViaSsm();
-      response.regions = regions;
-
-      return APIResponse.success(200, response);
+      const allowedAccounts = process.env.AWS_ACCOUNTS?.split(',').map((acc) => acc.trim());
+      const filteredAccounts = accounts.filter((a: any) => allowedAccounts?.includes(a.id as string));
+      return APIResponse.success(200, { accounts: filteredAccounts, regions });
     } catch (err) {
       console.error('Token verification failed:', err);
       return APIResponse.error(401, 'Invalid token');
@@ -86,9 +80,6 @@ class LambdaHandler {
   }
 
   async listAllAccounts(orgClient: OrganizationsClient) {
-    const orgInfo = await orgClient.send(new DescribeOrganizationCommand({}));
-    const managementId = orgInfo?.Organization?.MasterAccountId;
-
     const paginator = paginateListAccounts({ client: orgClient }, { MaxResults: 20 });
     const accounts = [];
     for await (const page of paginator) {
@@ -101,7 +92,7 @@ class LambdaHandler {
       }
     }
 
-    return { managementId, accounts };
+    return accounts;
   }
 }
 
