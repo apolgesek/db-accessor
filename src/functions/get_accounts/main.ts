@@ -5,7 +5,12 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { getBearerToken } from '../../shared/get-bearer-token';
 import { APIResponse } from '../../shared/response';
-import { GetParametersByPathCommand, GetParametersByPathCommandOutput, SSMClient } from '@aws-sdk/client-ssm';
+import {
+  GetParametersByPathCommand,
+  GetParametersByPathCommandOutput,
+  GetParametersCommand,
+  SSMClient,
+} from '@aws-sdk/client-ssm';
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: process.env.COGNITO_USER_POOL_ID as string,
@@ -44,10 +49,7 @@ class LambdaHandler {
       const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
       const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
 
-      const allowedAccounts = process.env.AWS_ACCOUNTS?.split(',').map((acc) => acc.trim());
-      const filteredAccounts = accounts.filter((a: any) => allowedAccounts?.includes(a.id as string));
-
-      return APIResponse.success(200, { accounts: filteredAccounts, regions });
+      return APIResponse.success(200, { accounts, regions });
     } catch (err) {
       console.error('Token verification failed:', err);
       return APIResponse.error(401, 'Invalid token');
@@ -56,10 +58,9 @@ class LambdaHandler {
 
   async listRegionsViaSsm() {
     const path = '/aws/service/global-infrastructure/regions';
-    const regions = [];
-    console.log('test start');
+    const codes: string[] = [];
 
-    let NextToken;
+    let NextToken: string | undefined;
     do {
       const out: GetParametersByPathCommandOutput = await ssm.send(
         new GetParametersByPathCommand({
@@ -71,16 +72,33 @@ class LambdaHandler {
       );
 
       for (const p of out.Parameters ?? []) {
-        const region = p.Name?.split('/').pop();
-        if (region) regions.push(region);
+        const code = p.Name?.split('/').pop();
+        if (code) codes.push(code);
       }
 
       NextToken = out.NextToken;
     } while (NextToken);
 
-    console.log('test end');
+    const names = codes.map((code) => `${path}/${code}/longName`);
+    const regionLongNames: Record<string, string> = {};
 
-    return regions.sort();
+    for (let i = 0; i < names.length; i += 10) {
+      const batch = names.slice(i, i + 10);
+      const paramsOut = await ssm.send(new GetParametersCommand({ Names: batch }));
+
+      for (const p of paramsOut.Parameters ?? []) {
+        const parts = (p.Name ?? '').split('/');
+        const code = parts[parts.length - 2];
+        const longName = p.Value;
+        if (code && longName) {
+          regionLongNames[code] = longName;
+        }
+      }
+    }
+
+    return Object.entries(regionLongNames)
+      .map(([code, longName]) => ({ code, longName }))
+      .sort((a, b) => a.code.localeCompare(b.code));
   }
 
   async listAllAccounts(orgClient: OrganizationsClient) {
@@ -96,7 +114,10 @@ class LambdaHandler {
       }
     }
 
-    return accounts;
+    const allowedAccounts = process.env.AWS_ACCOUNTS?.split(',').map((acc) => acc.trim());
+    const filteredAccounts = accounts.filter((a: any) => allowedAccounts?.includes(a.id as string));
+
+    return filteredAccounts.sort((a, b) => (a.name as string).localeCompare(b.name as string));
   }
 }
 
