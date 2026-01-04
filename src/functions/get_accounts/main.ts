@@ -57,13 +57,14 @@ class LambdaHandler {
   async listRegionsViaSsm() {
     const path = '/aws/service/global-infrastructure/regions';
     const regions = [];
+    console.log('test start');
 
     let NextToken;
     do {
       const out: GetParametersByPathCommandOutput = await ssm.send(
         new GetParametersByPathCommand({
           Path: path,
-          Recursive: true,
+          Recursive: false,
           NextToken,
           MaxResults: 10,
         }),
@@ -76,6 +77,8 @@ class LambdaHandler {
 
       NextToken = out.NextToken;
     } while (NextToken);
+
+    console.log('test end');
 
     return regions.sort();
   }
