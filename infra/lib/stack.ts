@@ -91,7 +91,7 @@ export class DbAccessorStack extends cdk.Stack {
     getAccountsFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ['ssm:GetParametersByPath'],
+        actions: ['ssm:GetParameters*'],
         resources: [`arn:aws:ssm:${process.env.AWS_REGION}::parameter/aws/service/global-infrastructure/regions*`],
       }),
     );
