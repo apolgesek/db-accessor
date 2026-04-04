@@ -15,4 +15,5 @@ new DbAccessorStack(app, 'DbAccessorStack', {
   githubRepo: 'db-accessor',
   cognitoUserPoolId: 'eu-central-1_6rLj50DRM',
   cognitoClientId: '6n5d5gru7c0ncf5npa0m5ls2n8',
+  allowedIp: '63.176.89.71',
 });
