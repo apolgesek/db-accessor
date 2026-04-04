@@ -106,6 +106,8 @@ export class DbAccessorStack extends cdk.Stack {
     const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', sharedVars);
     grantTable.grantReadWriteData(adminRejectRequestFn);
 
+    const allowedApiSourceIp = '63.182.178.166/32';
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -115,6 +117,11 @@ export class DbAccessorStack extends cdk.Stack {
         principals: [new iam.AnyPrincipal()],
         actions: ['execute-api:Invoke'],
         resources: ['*'],
+        conditions: {
+          IpAddress: {
+            'aws:SourceIp': allowedApiSourceIp,
+          },
+        },
       }),
     );
 
