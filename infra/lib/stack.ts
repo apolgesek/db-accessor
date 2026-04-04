@@ -14,6 +14,7 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   githubRepo: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
+  allowedIp: string;
   stage: 'dev' | 'prod';
 }
 
@@ -92,7 +93,7 @@ export class DbAccessorStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['ssm:GetParameters*'],
-        resources: [`arn:aws:ssm:${process.env.AWS_REGION}::parameter/aws/service/global-infrastructure/regions*`],
+        resources: [`arn:aws:ssm:${stack.region}::parameter/aws/service/global-infrastructure/regions*`],
       }),
     );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
@@ -106,8 +107,6 @@ export class DbAccessorStack extends cdk.Stack {
     const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', sharedVars);
     grantTable.grantReadWriteData(adminRejectRequestFn);
 
-    const allowedApiSourceIp = '63.182.178.166/32';
-
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -119,7 +118,7 @@ export class DbAccessorStack extends cdk.Stack {
         resources: ['*'],
         conditions: {
           IpAddress: {
-            'aws:SourceIp': allowedApiSourceIp,
+            'aws:SourceIp': `${props.allowedIp}/32`,
           },
         },
       }),
