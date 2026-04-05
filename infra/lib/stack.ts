@@ -98,6 +98,13 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
+    createRequestFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: assumeRoleArns,
+      }),
+    );
     grantTable.grantWriteData(createRequestFn);
     const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
     grantTable.grantReadData(getRequestFn);
