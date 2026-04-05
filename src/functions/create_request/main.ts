@@ -28,88 +28,82 @@ class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    try {
-      const body = JSON.parse(event.body || '{}');
-      const result = requestSchema.validate(body);
+    const body = JSON.parse(event.body || '{}');
+    const result = requestSchema.validate(body);
 
-      if (result.error) {
-        return APIResponse.error(400, 'Invalid request');
-      }
-
-      const creds = await getMgmtCreds();
-      const targetDbClient = new DynamoDBClient({
-        region: process.env.AWS_REGION,
-        credentials: creds,
-      });
-
-      const describeTableResponse = await targetDbClient.send(
-        new DescribeTableCommand({ TableName: result.value.table }),
-      );
-
-      if (!describeTableResponse.Table) {
-        return APIResponse.error(400, 'Invalid table');
-      }
-
-      const PK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName as string;
-      const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')
-        ?.AttributeName as string;
-
-      const key: Record<string, any> = {
-        [PK_NAME]: { S: result.value.targetPK },
-      };
-
-      if (SK_NAME) {
-        key[SK_NAME] = { S: result.value.targetSK };
-      }
-
-      const resp = await targetDbClient.send(
-        new GetItemCommand({
-          TableName: result.value.table,
-          Key: key,
-          ConsistentRead: false,
-        }),
-      );
-
-      if (!resp.Item) {
-        return APIResponse.error(404);
-      }
-
-      const dateNow = Date.now();
-      const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
-
-      const claims = event.requestContext?.authorizer?.claims ?? {};
-      const username = claims.username.split('db-accessor_')[1];
-      const requestId = crypto.randomUUID();
-      const createNewRequestCommand = new PutItemCommand({
-        TableName: process.env.GRANTS_TABLE_NAME,
-        Item: {
-          PK: { S: `USER#${username}` },
-          SK: { S: `REQUEST#${dateNow}#${requestId}` },
-          userId: { S: username },
-          status: { S: 'PENDING' },
-          createdAt: { S: new Date(dateNow).toISOString() },
-          accountId: { S: result.value.accountId },
-          table: { S: result.value.table },
-          region: { S: result.value.region },
-          duration: { N: result.value.duration.toString() },
-          targetPK: { S: result.value.targetPK },
-          targetSK: { S: result.value.targetSK },
-          approvedBy: { L: [] },
-          reason: { S: result.value.reason },
-          GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
-          GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
-          GSI_PENDING_PK: { S: 'PENDING' },
-          GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
-        },
-      });
-
-      await this.ddbClient.send(createNewRequestCommand);
-
-      return APIResponse.success(201, { id: `REQUEST#${dateNow}` });
-    } catch (err) {
-      console.error('Token verification failed:', err);
-      return APIResponse.error(401, 'Invalid token');
+    if (result.error) {
+      return APIResponse.error(400, 'Invalid request');
     }
+
+    const creds = await getMgmtCreds();
+    const targetDbClient = new DynamoDBClient({
+      region: process.env.AWS_REGION,
+      credentials: creds,
+    });
+
+    const describeTableResponse = await targetDbClient.send(
+      new DescribeTableCommand({ TableName: result.value.table }),
+    );
+
+    if (!describeTableResponse.Table) {
+      return APIResponse.error(400, 'Invalid table');
+    }
+
+    const PK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName as string;
+    const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName as string;
+
+    const key: Record<string, any> = {
+      [PK_NAME]: { S: result.value.targetPK },
+    };
+
+    if (SK_NAME) {
+      key[SK_NAME] = { S: result.value.targetSK };
+    }
+
+    const resp = await targetDbClient.send(
+      new GetItemCommand({
+        TableName: result.value.table,
+        Key: key,
+        ConsistentRead: false,
+      }),
+    );
+
+    if (!resp.Item) {
+      return APIResponse.error(404);
+    }
+
+    const dateNow = Date.now();
+    const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
+
+    const claims = event.requestContext?.authorizer?.claims ?? {};
+    const username = claims.username.split('db-accessor_')[1];
+    const requestId = crypto.randomUUID();
+    const createNewRequestCommand = new PutItemCommand({
+      TableName: process.env.GRANTS_TABLE_NAME,
+      Item: {
+        PK: { S: `USER#${username}` },
+        SK: { S: `REQUEST#${dateNow}#${requestId}` },
+        userId: { S: username },
+        status: { S: 'PENDING' },
+        createdAt: { S: new Date(dateNow).toISOString() },
+        accountId: { S: result.value.accountId },
+        table: { S: result.value.table },
+        region: { S: result.value.region },
+        duration: { N: result.value.duration.toString() },
+        targetPK: { S: result.value.targetPK },
+        targetSK: { S: result.value.targetSK },
+        approvedBy: { L: [] },
+        reason: { S: result.value.reason },
+        GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
+        GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+        GSI_PENDING_PK: { S: 'PENDING' },
+        GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+      },
+    });
+
+    await this.ddbClient.send(createNewRequestCommand);
+
+    return APIResponse.success(201, { id: `REQUEST#${dateNow}` });
   }
 }
 
