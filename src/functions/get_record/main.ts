@@ -72,8 +72,9 @@ class LambdaHandler {
       }
 
       const item = unmarshall(getItemResponse.Item);
+      const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
 
-      if (Date.now() > new Date(item.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
+      if (!adminApproval || Date.now() > new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
         return APIResponse.error(404);
       }
 
