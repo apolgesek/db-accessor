@@ -2,7 +2,6 @@ import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { getBearerToken } from '../../shared/get-bearer-token';
 
 const MS_IN_HOUR = 3_600_000;
 
@@ -10,13 +9,7 @@ class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const token = getBearerToken(event);
-    if (!token) {
-      return APIResponse.error(401, 'Missing token');
-    }
-
     try {
-      console.log(JSON.stringify(event.requestContext?.authorizer, null, 2));
       const claims = event.requestContext?.authorizer?.claims ?? {};
       const username = claims.username.split('db-accessor_')[1];
       const pk = `USER#${username}`;

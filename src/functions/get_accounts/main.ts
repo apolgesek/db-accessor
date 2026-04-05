@@ -1,9 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
 import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
-import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { getBearerToken } from '../../shared/get-bearer-token';
 import { APIResponse } from '../../shared/response';
 import {
   GetParametersByPathCommand,
@@ -12,11 +10,6 @@ import {
   SSMClient,
 } from '@aws-sdk/client-ssm';
 
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID as string,
-  tokenUse: 'access',
-  clientId: process.env.COGNITO_CLIENT_ID as string,
-});
 const sts = new STSClient({ region: process.env.AWS_REGION });
 const ssm = new SSMClient({ region: process.env.AWS_REGION });
 
@@ -38,22 +31,11 @@ async function getMgmtCreds() {
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const token = getBearerToken(event);
-    if (!token) {
-      return APIResponse.error(401, 'Missing token');
-    }
+    const creds = await getMgmtCreds();
+    const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
+    const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
 
-    try {
-      await verifier.verify(token);
-      const creds = await getMgmtCreds();
-      const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
-      const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
-
-      return APIResponse.success(200, { accounts, regions });
-    } catch (err) {
-      console.error('Token verification failed:', err);
-      return APIResponse.error(401, 'Invalid token');
-    }
+    return APIResponse.success(200, { accounts, regions });
   }
 
   async listRegionsViaSsm() {

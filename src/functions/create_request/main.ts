@@ -1,19 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
-import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { getBearerToken } from '../../shared/get-bearer-token';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 
 const sts = new STSClient({ region: process.env.AWS_REGION });
-
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID as string,
-  tokenUse: 'access',
-  clientId: process.env.COGNITO_CLIENT_ID as string,
-});
 
 async function getMgmtCreds() {
   const res = await sts.send(
@@ -36,13 +28,7 @@ class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const token = getBearerToken(event);
-    if (!token) {
-      return APIResponse.error(401, 'Missing token');
-    }
-
     try {
-      const claims = await verifier.verify(token);
       const body = JSON.parse(event.body || '{}');
       const result = requestSchema.validate(body);
 
@@ -91,6 +77,7 @@ class LambdaHandler {
       const dateNow = Date.now();
       const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
 
+      const claims = event.requestContext?.authorizer?.claims ?? {};
       const username = claims.username.split('db-accessor_')[1];
       const requestId = crypto.randomUUID();
       const createNewRequestCommand = new PutItemCommand({
