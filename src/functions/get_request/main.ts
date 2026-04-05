@@ -1,17 +1,10 @@
 import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { getBearerToken } from '../../shared/get-bearer-token';
 
 const MS_IN_HOUR = 3_600_000;
-
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID as string,
-  tokenUse: 'access',
-  clientId: process.env.COGNITO_CLIENT_ID as string,
-});
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -23,8 +16,8 @@ class LambdaHandler {
     }
 
     try {
-      const claims = await verifier.verify(token);
-
+      console.log(JSON.stringify(event.requestContext?.authorizer, null, 2));
+      const claims = event.requestContext?.authorizer?.claims ?? {};
       const username = claims.username.split('db-accessor_')[1];
       const pk = `USER#${username}`;
 
