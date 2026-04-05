@@ -1,6 +1,7 @@
 ﻿import * as cdk from 'aws-cdk-lib';
 import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cr from 'aws-cdk-lib/custom-resources';
@@ -129,15 +130,12 @@ export class DbAccessorStack extends cdk.Stack {
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
     });
-    record.addMethod('GET', new apigw.LambdaIntegration(getRecordFn));
 
     const request = api.root.addResource('request');
     request.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
     });
-    request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn));
-    request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn));
 
     const adminResource = api.root.addResource('admin');
     const adminGetRequest = adminResource.addResource('request');
@@ -145,28 +143,63 @@ export class DbAccessorStack extends cdk.Stack {
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'GET'],
     });
-    adminGetRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn));
 
     const adminApproveRequest = adminResource.addResource('approve-request');
     adminApproveRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST'],
     });
-    adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn));
 
     const adminRejectRequest = adminResource.addResource('reject-request');
     adminRejectRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST'],
     });
-    adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn));
 
     const getAccounts = api.root.addResource('accounts');
     getAccounts.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'GET'],
     });
-    getAccounts.addMethod('GET', new apigw.LambdaIntegration(getAccountsFn));
+
+    // Import the Cognito User Pool using the ID from shared vars
+    const importedUserPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', sharedVars.COGNITO_USER_POOL_ID);
+    // Create a Cognito authorizer for API Gateway
+    const cognitoAuthorizer = new apigw.CognitoUserPoolsAuthorizer(this, 'CognitoAuthorizer', {
+      cognitoUserPools: [importedUserPool],
+      authorizerName: `${projectName}-cognito-authorizer`,
+      identitySource: 'method.request.header.Authorization',
+    });
+
+    // Attach methods with Cognito authorizer
+    record.addMethod('GET', new apigw.LambdaIntegration(getRecordFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    adminGetRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
+    getAccounts.addMethod('GET', new apigw.LambdaIntegration(getAccountsFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+    });
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
 
