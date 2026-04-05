@@ -175,30 +175,37 @@ export class DbAccessorStack extends cdk.Stack {
     record.addMethod('GET', new apigw.LambdaIntegration(getRecordFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     request.addMethod('POST', new apigw.LambdaIntegration(createRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     request.addMethod('GET', new apigw.LambdaIntegration(getRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     adminGetRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
     getAccounts.addMethod('GET', new apigw.LambdaIntegration(getAccountsFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
     });
 
     const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');

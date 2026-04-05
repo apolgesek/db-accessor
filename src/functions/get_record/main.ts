@@ -5,16 +5,9 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
-import { CognitoJwtVerifier } from 'aws-jwt-verify';
-import { getBearerToken } from '../../shared/get-bearer-token';
 
 const MS_IN_HOUR = 3_600_000;
 const sts = new STSClient({ region: process.env.AWS_REGION });
-const verifier = CognitoJwtVerifier.create({
-  userPoolId: process.env.COGNITO_USER_POOL_ID as string,
-  tokenUse: 'access',
-  clientId: process.env.COGNITO_CLIENT_ID as string,
-});
 
 function base64urlDecode(str: string): string {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
@@ -47,72 +40,62 @@ class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-    const token = getBearerToken(event);
-    if (!token) {
-      return APIResponse.error(401, 'Missing token');
+    const claims = event.requestContext?.authorizer?.claims ?? {};
+    const username = claims.username.split('db-accessor_')[1];
+    const pathParams = event.pathParameters || {};
+    const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
+    const getItemResponse = await ddbClient.send(
+      new GetItemCommand({
+        TableName: process.env.GRANTS_TABLE_NAME,
+        Key: {
+          PK: { S: `USER#${username}` },
+          SK: { S: base64urlDecode(pathParams.id as string) },
+        },
+      }),
+    );
+
+    if (!getItemResponse.Item) {
+      return APIResponse.error(404);
     }
 
-    try {
-      const claims = await verifier.verify(token);
-      const username = claims.username.split('db-accessor_')[1];
-      const pathParams = event.pathParameters || {};
-      const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-      const getItemResponse = await ddbClient.send(
-        new GetItemCommand({
-          TableName: process.env.GRANTS_TABLE_NAME,
-          Key: {
-            PK: { S: `USER#${username}` },
-            SK: { S: base64urlDecode(pathParams.id as string) },
-          },
-        }),
-      );
+    const item = unmarshall(getItemResponse.Item);
+    const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
 
-      if (!getItemResponse.Item) {
-        return APIResponse.error(404);
-      }
-
-      const item = unmarshall(getItemResponse.Item);
-      const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
-
-      if (!adminApproval || Date.now() > new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
-        return APIResponse.error(404);
-      }
-
-      const creds = await getMgmtCreds();
-      const targetDbClient = new DynamoDBClient({
-        region: process.env.AWS_REGION,
-        credentials: creds,
-      });
-
-      const describeTableResponse = await targetDbClient.send(new DescribeTableCommand({ TableName: item.table }));
-
-      if (!describeTableResponse.Table) {
-        return APIResponse.error(400, 'Invalid table');
-      }
-
-      item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
-      item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
-
-      const accessor = new RecordAccessor(targetDbClient);
-      const result = await accessor.getRecord(item);
-      await this.ddbClient.send(
-        new PutItemCommand({
-          TableName: process.env.AUDIT_LOGS_TABLE_NAME,
-          Item: {
-            UserId: { S: item.userId },
-            CreatedAt: { N: new Date().getTime().toString() },
-            TableName: { S: item.table },
-            TargetPK: { S: item.targetPK },
-            TargetSK: { S: item.targetSK || 'N/A' },
-          },
-        }),
-      );
-
-      return result;
-    } catch (err) {
-      console.error('Request failed:', err);
-      return APIResponse.error(401);
+    if (!adminApproval || Date.now() > new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
+      return APIResponse.error(404);
     }
+
+    const creds = await getMgmtCreds();
+    const targetDbClient = new DynamoDBClient({
+      region: process.env.AWS_REGION,
+      credentials: creds,
+    });
+
+    const describeTableResponse = await targetDbClient.send(new DescribeTableCommand({ TableName: item.table }));
+
+    if (!describeTableResponse.Table) {
+      return APIResponse.error(400, 'Invalid table');
+    }
+
+    item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
+    item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
+
+    const accessor = new RecordAccessor(targetDbClient);
+    const result = await accessor.getRecord(item);
+    await this.ddbClient.send(
+      new PutItemCommand({
+        TableName: process.env.AUDIT_LOGS_TABLE_NAME,
+        Item: {
+          UserId: { S: item.userId },
+          CreatedAt: { N: new Date().getTime().toString() },
+          TableName: { S: item.table },
+          TargetPK: { S: item.targetPK },
+          TargetSK: { S: item.targetSK || 'N/A' },
+        },
+      }),
+    );
+
+    return result;
   }
 }
 

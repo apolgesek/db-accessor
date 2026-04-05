@@ -52,22 +52,8 @@ class LambdaHandler {
       preferredRole: groupConfig.preferredRole || null,
     };
 
-    const claimsToAddOrOverride: Record<string, any> = {};
-
-    if (userAttributes['preferred_username']) {
-      claimsToAddOrOverride['preferred_username'] = userAttributes['preferred_username'];
-    }
-
-    claimsToAddOrOverride['app_roles'] = effectiveGroups;
-
     event.response = {
       claimsAndScopeOverrideDetails: {
-        idTokenGeneration: {
-          claimsToAddOrOverride,
-        },
-        accessTokenGeneration: {
-          claimsToAddOrOverride,
-        },
         groupOverrideDetails,
       },
     };
