@@ -154,13 +154,13 @@ export class DbAccessorStack extends cdk.Stack {
     const adminApproveRequest = adminResource.addResource('approve-request');
     adminApproveRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
-      allowMethods: ['OPTIONS', 'POST'],
+      allowMethods: ['OPTIONS', 'PUT'],
     });
 
     const adminRejectRequest = adminResource.addResource('reject-request');
     adminRejectRequest.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
-      allowMethods: ['OPTIONS', 'POST'],
+      allowMethods: ['OPTIONS', 'PUT'],
     });
 
     const getAccounts = api.root.addResource('accounts');
