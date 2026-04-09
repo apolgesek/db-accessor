@@ -106,6 +106,8 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
     grantTable.grantWriteData(createRequestFn);
+    const createUnredactRequestFn = createLambda(this, projectName, 'create-unredact-request', sharedVars);
+    grantTable.grantReadWriteData(createUnredactRequestFn);
     const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
     grantTable.grantReadData(getRequestFn);
     const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
@@ -142,6 +144,11 @@ export class DbAccessorStack extends cdk.Stack {
     request.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
       allowMethods: ['OPTIONS', 'POST', 'GET'],
+    });
+    const unredactRequest = request.addResource('{id}').addResource('unredact');
+    unredactRequest.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST'],
     });
 
     const adminResource = api.root.addResource('admin');
@@ -194,17 +201,22 @@ export class DbAccessorStack extends cdk.Stack {
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
     });
+    unredactRequest.addMethod('POST', new apigw.LambdaIntegration(createUnredactRequestFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
     adminGetRequest.addMethod('GET', new apigw.LambdaIntegration(adminGetRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
     });
-    adminApproveRequest.addMethod('POST', new apigw.LambdaIntegration(adminApproveRequestFn), {
+    adminApproveRequest.addMethod('PUT', new apigw.LambdaIntegration(adminApproveRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
     });
-    adminRejectRequest.addMethod('POST', new apigw.LambdaIntegration(adminRejectRequestFn), {
+    adminRejectRequest.addMethod('PUT', new apigw.LambdaIntegration(adminRejectRequestFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
