@@ -21,7 +21,7 @@ class LambdaHandler {
     const decodedRequestId = atob(event.pathParameters?.id ?? '');
     const rootRequest = await this.ddbClient.send(
       new GetItemCommand({
-        TableName: process.env.REQUEST_TABLE_NAME!,
+        TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
           PK: { S: `USER#${username}` },
           SK: { S: decodedRequestId },
