@@ -5,6 +5,7 @@ import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
+import { EntityRequest } from '../../shared/entity-request';
 
 const MS_IN_HOUR = 3_600_000;
 const sts = new STSClient({ region: process.env.AWS_REGION });
@@ -58,8 +59,8 @@ class LambdaHandler {
       return APIResponse.error(404);
     }
 
-    const item = unmarshall(getItemResponse.Item);
-    const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
+    const item = unmarshall(getItemResponse.Item) as EntityRequest;
+    const adminApproval = item.approvedBy?.find((x) => x.role === 'ADMIN');
 
     if (!adminApproval || Date.now() > new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR) {
       return APIResponse.error(404);
@@ -77,11 +78,11 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid table');
     }
 
-    item.pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName;
-    item.skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
+    const pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName ?? '';
+    const skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
 
     const accessor = new RecordAccessor(targetDbClient);
-    const result = await accessor.getRecord(item);
+    const result = await accessor.getRecord({ ...item, pkName, skName });
     await this.ddbClient.send(
       new PutItemCommand({
         TableName: process.env.AUDIT_LOGS_TABLE_NAME,
@@ -102,7 +103,7 @@ class LambdaHandler {
 class RecordAccessor {
   constructor(private readonly targetDbClient: DynamoDBClient) {}
 
-  async getRecord(request: Record<string, any>): Promise<APIGatewayProxyResult> {
+  async getRecord(request: EntityRequest & { pkName: string; skName?: string }): Promise<APIGatewayProxyResult> {
     const pk = request.targetPK;
     const sk = request.targetSK;
     const PK_NAME = request.pkName;
@@ -114,7 +115,7 @@ class RecordAccessor {
     };
 
     if (sk) {
-      key[SK_NAME] = { S: sk };
+      key[SK_NAME!] = { S: sk };
     }
 
     const resp = await this.targetDbClient.send(
@@ -131,6 +132,12 @@ class RecordAccessor {
 
     let item = unmarshall(resp.Item);
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
+    const unredactPaths = request.unredactRequests?.flatMap((r) => r.paths) || [];
+
+    if (maskRuleset) {
+      maskRuleset.rules = maskRuleset.rules.filter((r) => !unredactPaths.includes(r.path));
+    }
+
     if (maskRuleset) {
       const redactor = new PathPatternRedactor(
         maskRuleset.rules.map((r) => r.path),

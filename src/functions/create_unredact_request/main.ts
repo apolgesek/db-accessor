@@ -35,7 +35,7 @@ class LambdaHandler {
 
     const createdAt = new Date().toISOString();
     const unredactRequests = rootRequest.Item.unredactRequests ? unmarshall(rootRequest.Item.unredactRequests) : [];
-    const requestId = `ROOT#${result.value.requestId}#UNREDACT#${createdAt}`;
+    const requestId = `UNREDACT#${createdAt}`;
     unredactRequests.push({
       requestId,
       createdAt,
