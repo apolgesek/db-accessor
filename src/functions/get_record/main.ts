@@ -96,14 +96,16 @@ class LambdaHandler {
       }),
     );
 
-    return APIResponse.success(200, { result: result, request: item });
+    return APIResponse.success(200, { ...result, request: item });
   }
 }
 
 class RecordAccessor {
   constructor(private readonly targetDbClient: DynamoDBClient) {}
 
-  async getRecord(request: EntityRequest & { pkName: string; skName?: string }): Promise<APIGatewayProxyResult> {
+  async getRecord(
+    request: EntityRequest & { pkName: string; skName?: string },
+  ): Promise<{ item: Record<string, any>; maskRuleset: any } | null> {
     const pk = request.targetPK;
     const sk = request.targetSK;
     const PK_NAME = request.pkName;
@@ -126,9 +128,7 @@ class RecordAccessor {
       }),
     );
 
-    if (!resp.Item) {
-      return APIResponse.error(404);
-    }
+    if (!resp.Item) return null;
 
     let item = unmarshall(resp.Item);
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
@@ -147,7 +147,7 @@ class RecordAccessor {
       item = redactor.redact(item);
     }
 
-    return APIResponse.success(200, { item, maskRuleset });
+    return { item, maskRuleset };
   }
 
   async findMaskRuleset(TABLE_NAME: string, item: Record<string, any>) {
