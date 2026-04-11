@@ -96,7 +96,7 @@ class LambdaHandler {
       }),
     );
 
-    return result;
+    return APIResponse.success(200, { result: result, request: item });
   }
 }
 
