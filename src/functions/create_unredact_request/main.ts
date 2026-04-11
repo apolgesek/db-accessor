@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { EntityRequest } from '../../shared/entity-request';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -34,7 +35,8 @@ class LambdaHandler {
     }
 
     const createdAt = new Date().toISOString();
-    const unredactRequests = rootRequest.Item.unredactRequests ? unmarshall(rootRequest.Item.unredactRequests) : [];
+    const item = unmarshall(rootRequest.Item) as EntityRequest;
+    const unredactRequests = item.unredactRequests ?? [];
     const requestId = `UNREDACT#${createdAt}`;
     unredactRequests.push({
       requestId,
