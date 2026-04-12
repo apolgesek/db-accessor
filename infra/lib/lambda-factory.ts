@@ -1,4 +1,5 @@
 import path from 'path';
+import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -14,7 +15,7 @@ export function createLambda(
   const functionName = `${projectName}-${fnName}`;
   const entry = path.join(__dirname, '..', '..', 'src', 'functions', fnName.replaceAll('-', '_'), 'main.ts');
 
-  return new nodejs.NodejsFunction(scope, functionName, {
+  const fn = new nodejs.NodejsFunction(scope, functionName, {
     functionName,
     entry,
     handler: 'lambdaHandler',
@@ -23,4 +24,10 @@ export function createLambda(
     environment,
     bundling: { minify: true, sourceMap: true, target: 'es2020' },
   });
+
+  new cdk.CfnOutput(scope, `${functionName}-execution-role`, {
+    value: fn.role?.roleArn ?? '',
+  });
+
+  return fn;
 }

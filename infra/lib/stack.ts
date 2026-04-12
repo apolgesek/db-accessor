@@ -87,7 +87,7 @@ export class DbAccessorStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ['sts:AssumeRole'],
-        resources: [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`],
+        resources: assumeRoleArns,
       }),
     );
     getAccountsFn.addToRolePolicy(
@@ -95,6 +95,14 @@ export class DbAccessorStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: ['ssm:GetParameters*'],
         resources: [`arn:aws:ssm:${stack.region}::parameter/aws/service/global-infrastructure/regions*`],
+      }),
+    );
+    const getTablesFn = createLambda(this, projectName, 'get-tables', sharedVars);
+    getTablesFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: assumeRoleArns,
       }),
     );
     const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
@@ -176,6 +184,12 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'GET'],
     });
 
+    const getTables = api.root.addResource('tables');
+    getTables.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'GET'],
+    });
+
     // Import the Cognito User Pool using the ID from shared vars
     const importedUserPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', sharedVars.COGNITO_USER_POOL_ID);
     // Create a Cognito authorizer for API Gateway
@@ -222,6 +236,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
     getAccounts.addMethod('GET', new apigw.LambdaIntegration(getAccountsFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
+    getTables.addMethod('GET', new apigw.LambdaIntegration(getTablesFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
