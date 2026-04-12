@@ -40,7 +40,7 @@ class LambdaHandler {
     const ddbClient = new DynamoDBClient({ region: result.value.region, credentials: creds });
     const tables = await this.listAllTables(ddbClient);
 
-    return APIResponse.success(200, { tables });
+    return APIResponse.success(200, tables);
   }
 
   async listAllTables(ddbClient: DynamoDBClient) {
