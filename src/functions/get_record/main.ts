@@ -8,7 +8,6 @@ import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { EntityRequest } from '../../shared/entity-request';
 
 const MS_IN_HOUR = 3_600_000;
-const sts = new STSClient({ region: process.env.AWS_REGION });
 
 function base64urlDecode(str: string): string {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
@@ -20,11 +19,13 @@ function base64urlDecode(str: string): string {
   return Buffer.from(base64, 'base64').toString('utf8');
 }
 
-async function getMgmtCreds() {
+async function getMgmtCreds(accountId: string, region: string) {
+  const sts = new STSClient({ region });
+
   const res = await sts.send(
     new AssumeRoleCommand({
       // todo: fetch from lambda execution role policy and pass in request
-      RoleArn: 'arn:aws:iam::058264309711:role/DbAccessorAppRole',
+      RoleArn: `arn:aws:iam::${accountId}:role/DbAccessorAppRole`,
       RoleSessionName: `GetDbRecordSession_${Date.now()}`,
       DurationSeconds: 900,
     }),
@@ -66,9 +67,9 @@ class LambdaHandler {
       return APIResponse.error(404);
     }
 
-    const creds = await getMgmtCreds();
+    const creds = await getMgmtCreds(item.accountId, item.region);
     const targetDbClient = new DynamoDBClient({
-      region: process.env.AWS_REGION,
+      region: item.region,
       credentials: creds,
     });
 
