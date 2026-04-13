@@ -1,14 +1,21 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import {
+  AttributeValue,
+  DescribeTableCommand,
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+} from '@aws-sdk/client-dynamodb';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
+import { EntityRequest } from '../../shared/entity-request';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const body = JSON.parse(event.body || '{}');
     const result = requestSchema.validate(body);
 
@@ -33,7 +40,7 @@ class LambdaHandler {
     const PK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName as string;
     const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName as string;
 
-    const key: Record<string, any> = {
+    const key: Record<string, AttributeValue> = {
       [PK_NAME]: { S: result.value.targetPK },
     };
 
@@ -59,27 +66,32 @@ class LambdaHandler {
     const claims = event.requestContext?.authorizer?.claims ?? {};
     const username = claims.username.split('db-accessor_')[1];
     const requestId = crypto.randomUUID();
+    const item: Partial<Record<keyof EntityRequest, AttributeValue>> = {
+      PK: { S: `USER#${username}` },
+      SK: { S: `REQUEST#${dateNow}#${requestId}` },
+      userId: { S: username },
+      status: { S: 'PENDING' },
+      createdAt: { S: new Date(dateNow).toISOString() },
+      accountId: { S: result.value.accountId },
+      table: { S: result.value.table },
+      region: { S: result.value.region },
+      duration: { N: result.value.duration.toString() },
+      targetPK: { S: result.value.targetPK },
+      approvedBy: { L: [] },
+      reason: { S: result.value.reason },
+      GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
+      GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+      GSI_PENDING_PK: { S: 'PENDING' },
+      GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+    };
+
+    if (SK_NAME) {
+      item.targetSK = { S: result.value.targetSK };
+    }
+
     const createNewRequestCommand = new PutItemCommand({
       TableName: process.env.GRANTS_TABLE_NAME,
-      Item: {
-        PK: { S: `USER#${username}` },
-        SK: { S: `REQUEST#${dateNow}#${requestId}` },
-        userId: { S: username },
-        status: { S: 'PENDING' },
-        createdAt: { S: new Date(dateNow).toISOString() },
-        accountId: { S: result.value.accountId },
-        table: { S: result.value.table },
-        region: { S: result.value.region },
-        duration: { N: result.value.duration.toString() },
-        targetPK: { S: result.value.targetPK },
-        targetSK: { S: result.value.targetSK },
-        approvedBy: { L: [] },
-        reason: { S: result.value.reason },
-        GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
-        GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
-        GSI_PENDING_PK: { S: 'PENDING' },
-        GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
-      },
+      Item: item,
     });
 
     await this.ddbClient.send(createNewRequestCommand);
