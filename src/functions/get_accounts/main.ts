@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
-import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import {
   GetParametersByPathCommand,
@@ -10,28 +10,18 @@ import {
   SSMClient,
 } from '@aws-sdk/client-ssm';
 
-const sts = new STSClient({ region: process.env.AWS_REGION });
 const ssm = new SSMClient({ region: process.env.AWS_REGION });
-
-async function getMgmtCreds() {
-  const res = await sts.send(
-    new AssumeRoleCommand({
-      RoleArn: `arn:aws:iam::${process.env.AWS_MANAGEMENT_ACCOUNT}:role/DbAccessorAppRole`,
-      RoleSessionName: `GetDbRecordSession_${Date.now()}`,
-      DurationSeconds: 900,
-    }),
-  );
-  if (!res.Credentials) throw new Error('AssumeRole returned no credentials');
-  return {
-    accessKeyId: res.Credentials.AccessKeyId!,
-    secretAccessKey: res.Credentials.SecretAccessKey!,
-    sessionToken: res.Credentials.SessionToken!,
-  };
-}
 
 class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const creds = await getMgmtCreds();
+    const managementAccount = process.env.AWS_MANAGEMENT_ACCOUNT;
+    const awsRegion = process.env.AWS_REGION;
+
+    if (!managementAccount || !awsRegion) {
+      return APIResponse.error(500, 'Missing AWS management account or region configuration');
+    }
+
+    const creds = await getStsSession(managementAccount, awsRegion);
     const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
     const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
 

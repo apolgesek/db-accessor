@@ -1,28 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { AssumeRoleCommand, STSClient } from '@aws-sdk/client-sts';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
-
-async function getMgmtCreds(accountId: string, region: string) {
-  const sts = new STSClient({ region });
-
-  const res = await sts.send(
-    new AssumeRoleCommand({
-      // todo: fetch from lambda execution role policy and pass in request
-      RoleArn: `arn:aws:iam::${accountId}:role/DbAccessorAppRole`,
-      RoleSessionName: `GetDbRecordSession_${Date.now()}`,
-      DurationSeconds: 900,
-    }),
-  );
-  if (!res.Credentials) throw new Error('AssumeRole returned no credentials');
-  return {
-    accessKeyId: res.Credentials.AccessKeyId!,
-    secretAccessKey: res.Credentials.SecretAccessKey!,
-    sessionToken: res.Credentials.SessionToken!,
-  };
-}
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -35,7 +16,7 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid request');
     }
 
-    const creds = await getMgmtCreds(result.value.accountId, result.value.region);
+    const creds = await getStsSession(result.value.accountId, result.value.region);
     const targetDbClient = new DynamoDBClient({
       region: result.value.region,
       credentials: creds,
