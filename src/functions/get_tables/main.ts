@@ -10,9 +10,9 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { requestSchema } from './request-schema';
 
-const sts = new STSClient({ region: process.env.AWS_REGION });
+async function getMgmtCreds(accountId: string, region: string) {
+  const sts = new STSClient({ region });
 
-async function getMgmtCreds(accountId: string) {
   const res = await sts.send(
     new AssumeRoleCommand({
       RoleArn: `arn:aws:iam::${accountId}:role/DbAccessorAppRole`,
@@ -36,7 +36,7 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid request');
     }
 
-    const creds = await getMgmtCreds(result.value.account);
+    const creds = await getMgmtCreds(result.value.account, result.value.region);
     const ddbClient = new DynamoDBClient({ region: result.value.region, credentials: creds });
     const tables = await this.listAllTables(ddbClient);
 
