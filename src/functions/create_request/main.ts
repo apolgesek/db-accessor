@@ -5,13 +5,13 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 
-const sts = new STSClient({ region: process.env.AWS_REGION });
+async function getMgmtCreds(accountId: string, region: string) {
+  const sts = new STSClient({ region });
 
-async function getMgmtCreds() {
   const res = await sts.send(
     new AssumeRoleCommand({
       // todo: fetch from lambda execution role policy and pass in request
-      RoleArn: 'arn:aws:iam::058264309711:role/DbAccessorAppRole',
+      RoleArn: `arn:aws:iam::${accountId}:role/DbAccessorAppRole`,
       RoleSessionName: `GetDbRecordSession_${Date.now()}`,
       DurationSeconds: 900,
     }),
@@ -35,9 +35,9 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid request');
     }
 
-    const creds = await getMgmtCreds();
+    const creds = await getMgmtCreds(result.value.accountId, result.value.region);
     const targetDbClient = new DynamoDBClient({
-      region: process.env.AWS_REGION,
+      region: result.value.region,
       credentials: creds,
     });
 
