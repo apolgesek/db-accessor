@@ -6,18 +6,9 @@ import { APIResponse } from '../../shared/response';
 import { getStsSession } from '../../shared/get-sts-session';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { EntityRequest } from '../../shared/entity-request';
+import { base64urlDecode, toJsonSafe } from './utils';
 
 const MS_IN_HOUR = 3_600_000;
-
-function base64urlDecode(str: string): string {
-  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-
-  while (base64.length % 4) {
-    base64 += '=';
-  }
-
-  return Buffer.from(base64, 'base64').toString('utf8');
-}
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -112,7 +103,7 @@ class RecordAccessor {
 
     if (!resp.Item) return null;
 
-    let item = unmarshall(resp.Item);
+    let item = toJsonSafe(unmarshall(resp.Item));
     const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
     const unredactPaths = request.unredactRequests?.flatMap((r) => r.paths) || [];
 
