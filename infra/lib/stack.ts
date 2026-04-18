@@ -42,6 +42,14 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    const rulesetTable = new dynamodb.Table(this, `${projectName}-rulesets`, {
+      tableName: `${projectName}-rulesets`,
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
+    });
+
     grantTable.addGlobalSecondaryIndex({
       indexName: 'GSI_ALL',
       partitionKey: { name: 'GSI_ALL_PK', type: dynamodb.AttributeType.STRING },
@@ -124,6 +132,11 @@ export class DbAccessorStack extends cdk.Stack {
     grantTable.grantReadWriteData(adminApproveRequestFn);
     const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', sharedVars);
     grantTable.grantReadWriteData(adminRejectRequestFn);
+    const adminCreateRulesetFn = createLambda(this, projectName, 'admin-create-ruleset', {
+      RULESET_TABLE_NAME: rulesetTable.tableName,
+      ...sharedVars,
+    });
+    rulesetTable.grantWriteData(adminCreateRulesetFn);
 
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
@@ -190,6 +203,12 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'GET'],
     });
 
+    const adminCreateRuleset = adminResource.addResource('create-ruleset');
+    adminCreateRuleset.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST'],
+    });
+
     // Import the Cognito User Pool using the ID from shared vars
     const importedUserPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', sharedVars.COGNITO_USER_POOL_ID);
     // Create a Cognito authorizer for API Gateway
@@ -241,6 +260,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
     getTables.addMethod('GET', new apigw.LambdaIntegration(getTablesFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
+    adminCreateRuleset.addMethod('POST', new apigw.LambdaIntegration(adminCreateRulesetFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
