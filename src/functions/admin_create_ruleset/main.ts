@@ -73,15 +73,18 @@ class LambdaHandler {
         ConsistentRead: false,
       };
 
-      if (SK_NAME && params.ExpressionAttributeNames && params.ExpressionAttributeValues) {
+      if (
+        SK_NAME &&
+        result.value.targetSK != null &&
+        params.ExpressionAttributeNames &&
+        params.ExpressionAttributeValues
+      ) {
         params.ExpressionAttributeNames['#sk'] = SK_NAME;
         params.ExpressionAttributeValues[':sk'] = result.value.targetSK;
-
-        if (result.value.operator === 'BEGINS_WITH') {
-          params.KeyConditionExpression = '#pk = :pk AND begins_with(#sk, :sk)';
-        } else {
-          params.KeyConditionExpression = `#pk = :pk AND #sk ${result.value.operator} :sk`;
-        }
+        params.KeyConditionExpression =
+          result.value.operator === 'BEGINS_WITH'
+            ? '#pk = :pk AND begins_with(#sk, :sk)'
+            : `#pk = :pk AND #sk ${result.value.operator} :sk`;
       } else {
         params.KeyConditionExpression = '#pk = :pk';
       }
