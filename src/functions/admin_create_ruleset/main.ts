@@ -1,5 +1,5 @@
-import { DescribeTableCommand, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DescribeTableCommand, DynamoDBClient, QueryCommand, QueryCommandInput } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createHash } from 'crypto';
 import { getStsSession } from '../../shared/get-sts-session';
@@ -51,7 +51,7 @@ class LambdaHandler {
       key[SK_NAME] = result.value.targetSK;
     }
 
-    if (result.value.operator === 'EQUALS') {
+    if (SK_NAME && result.value.operator === 'EQUALS') {
       const resp = await targetDbClient.send(
         new GetCommand({
           TableName: result.value.table,
@@ -64,17 +64,29 @@ class LambdaHandler {
         return APIResponse.error(404);
       }
     } else {
-      const resp = await targetDbClient.send(
-        new QueryCommand({
-          TableName: result.value.table,
-          KeyConditionExpression: `${PK_NAME} = :pk AND ${SK_NAME} ${result.value.operator} :sk`,
-          ExpressionAttributeValues: {
-            ':pk': result.value.targetPK,
-            ':sk': result.value.targetSK,
-          },
-          ConsistentRead: false,
-        }),
-      );
+      const params: QueryCommandInput = {
+        TableName: result.value.table,
+        ExpressionAttributeNames: { '#pk': PK_NAME },
+        ExpressionAttributeValues: {
+          ':pk': result.value.targetPK,
+        },
+        ConsistentRead: false,
+      };
+
+      if (SK_NAME && params.ExpressionAttributeNames && params.ExpressionAttributeValues) {
+        params.ExpressionAttributeNames['#sk'] = SK_NAME;
+        params.ExpressionAttributeValues[':sk'] = result.value.targetSK;
+
+        if (result.value.operator === 'BEGINS_WITH') {
+          params.KeyConditionExpression = '#pk = :pk AND begins_with(#sk, :sk)';
+        } else {
+          params.KeyConditionExpression = `#pk = :pk AND #sk ${result.value.operator} :sk`;
+        }
+      } else {
+        params.KeyConditionExpression = '#pk = :pk';
+      }
+
+      const resp = await targetDbClient.send(new QueryCommand(params));
 
       if (!resp.Items || resp.Items.length === 0) {
         return APIResponse.error(404);
