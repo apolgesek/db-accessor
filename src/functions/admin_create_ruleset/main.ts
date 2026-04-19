@@ -1,5 +1,5 @@
-import { DescribeTableCommand, DynamoDBClient, QueryCommand, QueryCommandInput } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommandInput, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createHash } from 'crypto';
 import { getStsSession } from '../../shared/get-sts-session';
