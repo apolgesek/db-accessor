@@ -136,6 +136,13 @@ export class DbAccessorStack extends cdk.Stack {
       RULESET_TABLE_NAME: rulesetTable.tableName,
       ...sharedVars,
     });
+    adminCreateRulesetFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['sts:AssumeRole'],
+        resources: assumeRoleArns,
+      }),
+    );
     rulesetTable.grantWriteData(adminCreateRulesetFn);
 
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
