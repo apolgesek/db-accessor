@@ -1,4 +1,4 @@
-import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DescribeTableCommand, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createHash } from 'crypto';
@@ -51,16 +51,34 @@ class LambdaHandler {
       key[SK_NAME] = result.value.targetSK;
     }
 
-    const resp = await targetDbClient.send(
-      new GetCommand({
-        TableName: result.value.table,
-        Key: key,
-        ConsistentRead: false,
-      }),
-    );
+    if (result.value.operator === 'EQUALS') {
+      const resp = await targetDbClient.send(
+        new GetCommand({
+          TableName: result.value.table,
+          Key: key,
+          ConsistentRead: false,
+        }),
+      );
 
-    if (!resp.Item) {
-      return APIResponse.error(404);
+      if (!resp.Item) {
+        return APIResponse.error(404);
+      }
+    } else {
+      const resp = await targetDbClient.send(
+        new QueryCommand({
+          TableName: result.value.table,
+          KeyConditionExpression: `${PK_NAME} = :pk AND ${SK_NAME} ${result.value.operator} :sk`,
+          ExpressionAttributeValues: {
+            ':pk': result.value.targetPK,
+            ':sk': result.value.targetSK,
+          },
+          ConsistentRead: false,
+        }),
+      );
+
+      if (!resp.Items || resp.Items.length === 0) {
+        return APIResponse.error(404);
+      }
     }
 
     const { region, accountId, table, targetPK, targetSK, ruleset, operator } = result.value;
