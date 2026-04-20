@@ -74,6 +74,7 @@ export class DbAccessorStack extends cdk.Stack {
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
+    rulesetTable.grantReadData(getRecordFn);
 
     const managementAccountId = '058264309711';
     const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];

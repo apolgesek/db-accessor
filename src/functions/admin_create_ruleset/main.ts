@@ -99,17 +99,21 @@ class LambdaHandler {
     const { region, accountId, table, targetPK, targetSK, ruleset, operator } = result.value;
 
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
-    const pkSource = `${accountId}#${region}#${table}#${targetPK}${targetSK ? `#${targetSK}` : ''}`;
+    const dateNow = Date.now();
+    const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
+    const pkSource = `${accountId}#${region}#${yearMonth}`;
     const pkHash = createHash('sha256').update(pkSource).digest().subarray(0, 12).toString('base64url');
 
     const item: Record<string, any> = {
       PK: pkHash,
-      SK: Date.now().toString(),
-      createdAt: new Date().toISOString(),
+      SK: dateNow.toString(),
+      createdAt: new Date(dateNow).toISOString(),
       accountId,
       region,
       targetPK,
       ruleset,
+      GSI_TABLE_PK: `${accountId}#${region}#${table}`,
+      GSI_TABLE_SK: dateNow.toString(),
     };
 
     if (targetSK) {

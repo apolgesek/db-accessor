@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { APIResponse } from '../../shared/response';
-import { getStsSession } from '../../shared/get-sts-session';
-import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
+import { createHash } from 'crypto';
 import { EntityRequest } from '../../shared/entity-request';
+import { getStsSession } from '../../shared/get-sts-session';
+import { APIResponse } from '../../shared/response';
+import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { base64urlDecode, toJsonSafe } from './utils';
 
 const MS_IN_HOUR = 3_600_000;
@@ -104,41 +106,54 @@ class RecordAccessor {
     if (!resp.Item) return null;
 
     let item = toJsonSafe(unmarshall(resp.Item));
-    const maskRuleset = await this.findMaskRuleset(TABLE_NAME, item);
+    let maskRuleset = await this.findMaskRuleset(request);
     const unredactPaths = request.unredactRequests?.flatMap((r) => r.paths) || [];
 
     if (maskRuleset) {
-      maskRuleset.rules = maskRuleset.rules.filter((r) => !unredactPaths.includes(r.path));
+      maskRuleset = maskRuleset.filter((r) => !unredactPaths.includes(r));
     }
 
     if (maskRuleset) {
-      const redactor = new PathPatternRedactor(
-        maskRuleset.rules.map((r) => r.path),
-        DEFAULT_REDACTION,
-      );
-
+      const redactor = new PathPatternRedactor(maskRuleset, DEFAULT_REDACTION);
       item = redactor.redact(item);
     }
 
     return { item, maskRuleset };
   }
 
-  async findMaskRuleset(TABLE_NAME: string, item: Record<string, any>) {
-    return Promise.resolve({
-      rulesetId: 1,
-      version: 1,
-      rules: [
-        {
-          path: 'personalDetails.email',
+  async findMaskRuleset(request: EntityRequest): Promise<null | string[]> {
+    const pkSource = `${request.accountId}#${request.region}#${request.table}`;
+    const pkHash = createHash('sha256').update(pkSource).digest().subarray(0, 12).toString('base64url');
+    const res = await DynamoDBDocumentClient.from(this.targetDbClient).send(
+      new QueryCommand({
+        TableName: process.env.RULESET_TABLE_NAME,
+        KeyConditionExpression: 'PK = :pk',
+        ExpressionAttributeValues: {
+          ':pk': pkHash,
         },
-        {
-          path: 'personalDetails.phone',
-        },
-        {
-          path: 'addresses[].line1',
-        },
-      ],
+        ConsistentRead: false,
+      }),
+    );
+
+    if (!res.Items || res.Items.length === 0) {
+      return null;
+    }
+
+    if (res.Items?.length === 1) {
+      return res.Items[0].ruleset;
+    }
+
+    const combinedRuleset: string[] = [];
+    res.Items.forEach((item) => {
+      if (
+        (item.operator === 'BEGINS_WITH' && request.targetSK.startsWith(item.targetSK)) ||
+        (item.operator === 'EQUALS' && request.targetSK === item.targetSK)
+      ) {
+        combinedRuleset.push(...item.ruleset.map((r: { path: string }) => r.path));
+      }
     });
+
+    return Array.from(new Set(combinedRuleset));
   }
 }
 
