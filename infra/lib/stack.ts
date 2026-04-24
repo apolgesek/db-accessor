@@ -50,6 +50,18 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    rulesetTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_ACCOUNT_REGION',
+      partitionKey: { name: 'GSI_ACCOUNT_REGION_PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI_ACCOUNT_REGION_SK', type: dynamodb.AttributeType.STRING },
+    });
+
+    rulesetTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_ACCOUNT_REGION_TABLE',
+      partitionKey: { name: 'GSI_ACCOUNT_REGION_TABLE_PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'GSI_ACCOUNT_REGION_TABLE_SK', type: dynamodb.AttributeType.STRING },
+    });
+
     grantTable.addGlobalSecondaryIndex({
       indexName: 'GSI_ALL',
       partitionKey: { name: 'GSI_ALL_PK', type: dynamodb.AttributeType.STRING },
@@ -70,6 +82,7 @@ export class DbAccessorStack extends cdk.Stack {
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+      RULESET_TABLE_NAME: rulesetTable.tableName,
       ...sharedVars,
     });
     auditTable.grantWriteData(getRecordFn);

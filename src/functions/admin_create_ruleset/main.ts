@@ -1,9 +1,25 @@
 import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommandInput, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  QueryCommandInput,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { createHash } from 'crypto';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
+import {
+  ACTIVE_RULESET_SK,
+  getRulesetAccountRegionPk,
+  getRulesetAccountRegionSk,
+  getRulesetAccountRegionTablePk,
+  getRulesetAccountRegionTableSk,
+  getRulesetHistoryPk,
+  getRulesetHistorySk,
+  getRulesetScopeKey,
+  getRulesetSnapshotPk,
+} from '../../shared/ruleset';
 import { requestSchema } from './request-schema';
 
 class LambdaHandler {
@@ -100,35 +116,86 @@ class LambdaHandler {
 
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
     const dateNow = Date.now();
-    const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
-    const pkSource = `${accountId}#${region}#${yearMonth}`;
-    const pkHash = createHash('sha256').update(pkSource).digest().subarray(0, 12).toString('base64url');
+    const createdAt = new Date(dateNow).toISOString();
+    const scopeKey = getRulesetScopeKey(targetPK, targetSK, operator);
 
-    const item: Record<string, any> = {
-      PK: pkHash,
-      SK: dateNow.toString(),
-      createdAt: new Date(dateNow).toISOString(),
+    const historyItem: Record<string, unknown> = {
+      PK: getRulesetHistoryPk(accountId),
+      SK: getRulesetHistorySk(dateNow, region, table, scopeKey),
+      entityType: 'RULESET_HISTORY',
+      createdAt,
+      createdAtTimestamp: dateNow,
       accountId,
       region,
+      table,
       targetPK,
       ruleset,
-      GSI_TABLE_PK: `${accountId}#${region}#${table}`,
-      GSI_TABLE_SK: dateNow.toString(),
+      scopeKey,
+      GSI_ACCOUNT_REGION_PK: getRulesetAccountRegionPk(accountId, region),
+      GSI_ACCOUNT_REGION_SK: getRulesetAccountRegionSk(dateNow, table, scopeKey),
+      GSI_ACCOUNT_REGION_TABLE_PK: getRulesetAccountRegionTablePk(accountId, region, table),
+      GSI_ACCOUNT_REGION_TABLE_SK: getRulesetAccountRegionTableSk(dateNow, scopeKey),
     };
 
     if (targetSK) {
-      item['targetSK'] = targetSK;
-      item['operator'] = operator;
+      historyItem['targetSK'] = targetSK;
+      historyItem['operator'] = operator;
     }
 
     await docClient.send(
-      new PutCommand({
-        TableName: process.env.RULESET_TABLE_NAME,
-        Item: item,
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: process.env.RULESET_TABLE_NAME,
+              Item: historyItem,
+            },
+          },
+          {
+            Update: {
+              TableName: process.env.RULESET_TABLE_NAME,
+              Key: {
+                PK: getRulesetSnapshotPk(accountId, region, table),
+                SK: ACTIVE_RULESET_SK,
+              },
+              UpdateExpression: `SET
+                #entityType = if_not_exists(#entityType, :entityType),
+                #accountId = if_not_exists(#accountId, :accountId),
+                #region = if_not_exists(#region, :region),
+                #table = if_not_exists(#table, :table),
+                #updatedAt = :updatedAt,
+                #activeRulesets = if_not_exists(#activeRulesets, :emptyActiveRulesets),
+                #activeRulesets.#scopeKey = :scope`,
+              ExpressionAttributeNames: {
+                '#entityType': 'entityType',
+                '#accountId': 'accountId',
+                '#region': 'region',
+                '#table': 'table',
+                '#updatedAt': 'updatedAt',
+                '#activeRulesets': 'activeRulesets',
+                '#scopeKey': scopeKey,
+              },
+              ExpressionAttributeValues: {
+                ':entityType': 'ACTIVE_RULESET',
+                ':accountId': accountId,
+                ':region': region,
+                ':table': table,
+                ':updatedAt': createdAt,
+                ':emptyActiveRulesets': {},
+                ':scope': {
+                  targetPK,
+                  ...(targetSK ? { targetSK, operator } : {}),
+                  ruleset,
+                  updatedAt: createdAt,
+                },
+              },
+            },
+          },
+        ],
       }),
     );
 
-    return APIResponse.success(201, { id: pkHash });
+    return APIResponse.success(201, { id: scopeKey });
   }
 }
 
