@@ -1,12 +1,17 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { createHash } from 'crypto';
 import { EntityRequest } from '../../shared/entity-request';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
+import {
+  ACTIVE_RULESET_SK,
+  ActiveRulesetSnapshot,
+  getRulesetSnapshotPk,
+  resolveActiveMaskRuleset,
+} from '../../shared/ruleset';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { base64urlDecode, toJsonSafe } from './utils';
 
@@ -19,8 +24,7 @@ class LambdaHandler {
     const claims = event.requestContext?.authorizer?.claims ?? {};
     const username = claims.username.split('db-accessor_')[1];
     const pathParams = event.pathParameters || {};
-    const ddbClient = new DynamoDBClient({ region: process.env.AWS_REGION });
-    const getItemResponse = await ddbClient.send(
+    const getItemResponse = await this.ddbClient.send(
       new GetItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
@@ -56,7 +60,7 @@ class LambdaHandler {
     const pkName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName ?? '';
     const skName = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName;
 
-    const accessor = new RecordAccessor(targetDbClient);
+    const accessor = new RecordAccessor(targetDbClient, this.ddbClient);
     const result = await accessor.getRecord({ ...item, pkName, skName });
     await this.ddbClient.send(
       new PutItemCommand({
@@ -76,7 +80,7 @@ class LambdaHandler {
 }
 
 class RecordAccessor {
-  constructor(private readonly targetDbClient: DynamoDBClient) {}
+  constructor(private readonly targetDbClient: DynamoDBClient, private readonly metadataDbClient: DynamoDBClient) {}
 
   async getRecord(
     request: EntityRequest & { pkName: string; skName?: string },
@@ -122,38 +126,18 @@ class RecordAccessor {
   }
 
   async findMaskRuleset(request: EntityRequest): Promise<null | string[]> {
-    const pkSource = `${request.accountId}#${request.region}#${request.table}`;
-    const pkHash = createHash('sha256').update(pkSource).digest().subarray(0, 12).toString('base64url');
-    const res = await DynamoDBDocumentClient.from(this.targetDbClient).send(
-      new QueryCommand({
+    const res = await DynamoDBDocumentClient.from(this.metadataDbClient).send(
+      new GetCommand({
         TableName: process.env.RULESET_TABLE_NAME,
-        KeyConditionExpression: 'PK = :pk',
-        ExpressionAttributeValues: {
-          ':pk': pkHash,
+        Key: {
+          PK: getRulesetSnapshotPk(request.accountId, request.region, request.table),
+          SK: ACTIVE_RULESET_SK,
         },
         ConsistentRead: false,
       }),
     );
 
-    if (!res.Items || res.Items.length === 0) {
-      return null;
-    }
-
-    if (res.Items?.length === 1) {
-      return res.Items[0].ruleset;
-    }
-
-    const combinedRuleset: string[] = [];
-    res.Items.forEach((item) => {
-      if (
-        (item.operator === 'BEGINS_WITH' && request.targetSK.startsWith(item.targetSK)) ||
-        (item.operator === 'EQUALS' && request.targetSK === item.targetSK)
-      ) {
-        combinedRuleset.push(...item.ruleset.map((r: { path: string }) => r.path));
-      }
-    });
-
-    return Array.from(new Set(combinedRuleset));
+    return resolveActiveMaskRuleset((res.Item as ActiveRulesetSnapshot | undefined)?.activeRulesets, request);
   }
 }
 
