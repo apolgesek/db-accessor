@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export function toJsonSafe<T>(value: T): any {
+export function toJsonSafe<T>(value: T): unknown {
   if (value instanceof Set) {
     return Array.from(value, toJsonSafe);
   }
@@ -9,7 +8,7 @@ export function toJsonSafe<T>(value: T): any {
   }
 
   if (value && typeof value === 'object') {
-    const result: any = {};
+    const result: Record<string, unknown> = {};
 
     for (const [key, nestedValue] of Object.entries(value)) {
       result[key] = toJsonSafe(nestedValue);

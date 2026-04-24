@@ -87,7 +87,7 @@ class LambdaHandler {
     }
 
     const allowedAccounts = process.env.AWS_ACCOUNTS?.split(',').map((acc) => acc.trim());
-    const filteredAccounts = accounts.filter((a: any) => allowedAccounts?.includes(a.id as string));
+    const filteredAccounts = accounts.filter((a) => allowedAccounts?.includes(a.id as string));
 
     return filteredAccounts.sort((a, b) => (a.name as string).localeCompare(b.name as string));
   }

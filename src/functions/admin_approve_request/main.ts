@@ -9,9 +9,14 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const groups = claims['cognito:groups'] as string[] | undefined;
+    const rawGroups = claims['cognito:groups'];
+    const groups: string[] = Array.isArray(rawGroups)
+      ? rawGroups
+      : typeof rawGroups === 'string'
+      ? rawGroups.split(',')
+      : [];
 
-    if (!groups?.includes('ADMIN')) {
+    if (!groups.includes('ADMIN')) {
       return APIResponse.error(401, 'Unauthorized');
     }
 

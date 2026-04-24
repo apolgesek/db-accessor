@@ -31,13 +31,13 @@ export class PathPatternRedactor {
   }
 
   redact<T>(input: T, options: RedactOptions = {}): T {
-    const out: any = options.mutate ? (input as any) : structuredClone(input as any);
+    const out = options.mutate ? input : structuredClone(input);
     const seen = new WeakSet<object>();
     this.apply(out, [this.rootTrie], seen);
-    return out as T;
+    return out;
   }
 
-  private apply(node: any, active: TrieNode[], seen: WeakSet<object>): void {
+  private apply(node: unknown, active: TrieNode[], seen: WeakSet<object>): void {
     if (node == null) return;
     if (typeof node !== 'object') return;
 
@@ -45,25 +45,26 @@ export class PathPatternRedactor {
     seen.add(node);
 
     if (Array.isArray(node)) {
-      for (let i = 0; i < node.length; i++) {
+      const arr = node as unknown[];
+      for (let i = 0; i < arr.length; i++) {
         const nextActive = this.nextForArrayIndex(active, i);
         if (nextActive.length === 0) continue;
 
         if (nextActive.some((n) => n.redact)) {
-          node[i] = this.redactionText;
+          arr[i] = this.redactionText;
         } else {
-          this.apply(node[i], nextActive, seen);
+          this.apply(arr[i], nextActive, seen);
         }
       }
       return;
     }
 
-    for (const [key, value] of Object.entries(node)) {
+    for (const [key, value] of Object.entries(node as object)) {
       const nextActive = this.nextForObjectKey(active, key);
       if (nextActive.length === 0) continue;
 
       if (nextActive.some((n) => n.redact)) {
-        (node as any)[key] = this.redactionText;
+        (node as Record<string, unknown>)[key] = this.redactionText;
       } else {
         this.apply(value, nextActive, seen);
       }

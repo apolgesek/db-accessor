@@ -1,4 +1,4 @@
-import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { AttributeValue, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
@@ -10,9 +10,14 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const groups = claims?.['cognito:groups'] as string[] | undefined;
+    const rawGroups = claims?.['cognito:groups'];
+    const groups: string[] = Array.isArray(rawGroups)
+      ? rawGroups
+      : typeof rawGroups === 'string'
+      ? rawGroups.split(',')
+      : [];
 
-    if (!groups?.includes('ADMIN')) {
+    if (!groups.includes('ADMIN')) {
       return APIResponse.error(401, 'Unauthorized');
     }
 
@@ -24,7 +29,7 @@ class LambdaHandler {
     }
 
     const items =
-      queryParams.status === 'PENDING' ? await this.getPendingRequests() : await this.getAllRequests(queryParams);
+      queryParams.status === 'PENDING' ? await this.getPendingRequests() : await this.getAllRequests(result.value);
 
     return APIResponse.success(200, {
       count: items.length,
@@ -32,11 +37,11 @@ class LambdaHandler {
     });
   }
 
-  private async getAllRequests(queryParams: any): Promise<any[]> {
-    const items = [];
-    let lastEvaluatedKey: Record<string, any> | undefined;
+  private async getAllRequests(params: { startDate: string; endDate: string }): Promise<Record<string, unknown>[]> {
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
-    const months = monthsBetween(new Date(queryParams.startDate), new Date(queryParams.endDate));
+    const months = monthsBetween(new Date(params.startDate), new Date(params.endDate));
 
     for (const timeRange of months) {
       const rangeItems = [];
@@ -71,9 +76,9 @@ class LambdaHandler {
     return items;
   }
 
-  private async getPendingRequests(): Promise<any[]> {
-    const items = [];
-    let lastEvaluatedKey: Record<string, any> | undefined;
+  private async getPendingRequests(): Promise<Record<string, unknown>[]> {
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
     do {
       const cmd = new QueryCommand({

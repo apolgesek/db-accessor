@@ -16,7 +16,8 @@ export const requestSchema = Joi.object({
     .required(),
   targetPK: Joi.string().required(),
   targetSK: Joi.string().optional(),
-  operator: Joi.string().valid('BEGINS_WITH', 'EQUALS').when('targetSK', {
+  pkOperator: Joi.string().valid('BEGINS_WITH', 'EQUALS').optional(),
+  skOperator: Joi.string().valid('BEGINS_WITH', 'EQUALS').when('targetSK', {
     is: Joi.exist(),
     then: Joi.required(),
     otherwise: Joi.forbidden(),

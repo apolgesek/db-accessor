@@ -10,7 +10,8 @@ export type RulesetOperator = 'BEGINS_WITH' | 'EQUALS';
 export type ActiveRulesetScope = {
   targetPK: string;
   targetSK?: string;
-  operator?: RulesetOperator;
+  pkOperator?: RulesetOperator;
+  skOperator?: RulesetOperator;
   ruleset: RulesetRule[];
   updatedAt: string;
 };
@@ -61,9 +62,14 @@ export function getRulesetSnapshotPk(accountId: string, region: string, table: s
   return `ACTIVE_RULESET#${accountId}#${region}#${table}`;
 }
 
-export function getRulesetScopeKey(targetPK: string, targetSK?: string, operator?: RulesetOperator): string {
+export function getRulesetScopeKey(
+  targetPK: string,
+  targetSK?: string,
+  pkOperator?: RulesetOperator,
+  skOperator?: RulesetOperator,
+): string {
   return createHash('sha256')
-    .update(`${targetPK}#${targetSK || ''}#${operator || ''}`)
+    .update(`${targetPK}#${targetSK || ''}#${pkOperator || ''}#${skOperator || ''}`)
     .digest()
     .subarray(0, 12)
     .toString('base64url');
@@ -80,7 +86,11 @@ function matchesScope(
     targetSK?: string;
   },
 ): boolean {
-  if (scope.targetPK !== request.targetPK) {
+  if (scope.pkOperator === 'BEGINS_WITH') {
+    if (!request.targetPK.startsWith(scope.targetPK)) {
+      return false;
+    }
+  } else if (scope.targetPK !== request.targetPK) {
     return false;
   }
 
@@ -92,7 +102,7 @@ function matchesScope(
     return false;
   }
 
-  if (scope.operator === 'BEGINS_WITH') {
+  if (scope.skOperator === 'BEGINS_WITH') {
     return request.targetSK.startsWith(scope.targetSK);
   }
 

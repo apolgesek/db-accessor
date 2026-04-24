@@ -56,11 +56,7 @@ export class DbAccessorStack extends cdk.Stack {
       sortKey: { name: 'GSI_ACCOUNT_REGION_SK', type: dynamodb.AttributeType.STRING },
     });
 
-    rulesetTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_ACCOUNT_REGION_TABLE',
-      partitionKey: { name: 'GSI_ACCOUNT_REGION_TABLE_PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'GSI_ACCOUNT_REGION_TABLE_SK', type: dynamodb.AttributeType.STRING },
-    });
+    // GSI_ACCOUNT_REGION_TABLE must be added in a separate deployment (DynamoDB allows only one GSI creation per UpdateTable call)
 
     grantTable.addGlobalSecondaryIndex({
       indexName: 'GSI_ALL',
