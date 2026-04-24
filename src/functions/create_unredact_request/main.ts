@@ -59,7 +59,7 @@ class LambdaHandler {
           '#unredactRequests': 'unredactRequests',
         },
         ExpressionAttributeValues: {
-          ':unredactRequests': { L: unredactRequests.map((r: any) => ({ M: marshall(r) })) },
+          ':unredactRequests': { L: unredactRequests.map((r) => ({ M: marshall(r) })) },
         },
       }),
     );

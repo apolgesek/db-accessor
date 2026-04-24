@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { DescribeTableCommand, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  AttributeValue,
+  DescribeTableCommand,
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+} from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
@@ -84,14 +90,14 @@ class RecordAccessor {
 
   async getRecord(
     request: EntityRequest & { pkName: string; skName?: string },
-  ): Promise<{ item: Record<string, any>; maskRuleset: any } | null> {
+  ): Promise<{ item: Record<string, unknown>; maskRuleset: string[] | null } | null> {
     const pk = request.targetPK;
     const sk = request.targetSK;
     const PK_NAME = request.pkName;
     const SK_NAME = request.skName;
     const TABLE_NAME = request.table;
 
-    const key: Record<string, any> = {
+    const key: Record<string, AttributeValue> = {
       [PK_NAME]: { S: pk },
     };
 
@@ -109,7 +115,7 @@ class RecordAccessor {
 
     if (!resp.Item) return null;
 
-    let item = toJsonSafe(unmarshall(resp.Item));
+    let item = toJsonSafe(unmarshall(resp.Item)) as Record<string, unknown>;
     let maskRuleset = await this.findMaskRuleset(request);
     const unredactPaths = request.unredactRequests?.flatMap((r) => r.paths) || [];
 

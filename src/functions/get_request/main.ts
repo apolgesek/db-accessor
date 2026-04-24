@@ -1,7 +1,8 @@
-import { DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { AttributeValue, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { ApprovedBy, EntityRequest } from '../../shared/entity-request';
 
 const MS_IN_HOUR = 3_600_000;
 
@@ -14,9 +15,8 @@ class LambdaHandler {
       const username = claims.username.split('db-accessor_')[1];
       const pk = `USER#${username}`;
 
-      let items = [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let lastEvaluatedKey: Record<string, any> | undefined;
+      let items: EntityRequest[] = [];
+      let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
       do {
         const cmd = new QueryCommand({
@@ -35,7 +35,7 @@ class LambdaHandler {
         const res = await this.ddbClient.send(cmd);
 
         for (const it of res.Items ?? []) {
-          items.push(unmarshall(it));
+          items.push(unmarshall(it) as EntityRequest);
         }
 
         lastEvaluatedKey = res.LastEvaluatedKey;
@@ -58,8 +58,9 @@ class LambdaHandler {
     }
   }
 
-  private setIsAvailable(item: any, now: number): boolean {
-    const adminApproval = item.approvedBy.find((x: any) => x.role === 'ADMIN');
+  private setIsAvailable(item: EntityRequest, now: number): boolean {
+    const adminApproval = item.approvedBy?.find((x: ApprovedBy) => x.role === 'ADMIN');
+    if (!adminApproval) return false;
     return (
       item.status === 'APPROVED' && new Date(adminApproval.approvedAt).getTime() + item.duration * MS_IN_HOUR >= now
     );

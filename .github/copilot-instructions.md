@@ -50,7 +50,7 @@ npm run synth
 - **Function naming contract between infra and app**:
   - Infra uses kebab-case names (for Lambda resource names).
   - Source folders in `src/functions` are snake_case.
-  - `infra/lib/lambda-factory.ts` maps kebab-case to snake_case with `fnName.replaceAll('-', '_')`.
+  - `infra/lib/lambda-factory.ts` maps kebab-case to snake*case with `fnName.replaceAll('-', '*')`.
 - **Request validation pattern**: handlers with input payloads use colocated Joi schemas in `request-schema.ts` and return `APIResponse.error(400, 'Invalid request')` on validation failure.
 - **HTTP response standardization**: handlers use `APIResponse.success/error` (`src/shared/response.ts`) to return API Gateway responses with CORS headers.
 - **Grants/ruleset key patterns are semantic and reused**:
@@ -62,3 +62,12 @@ npm run synth
 - **CI/CD coupling to commit style**:
   - PRs enforce conventional commit types: `feat`, `fix`, `refactor`, `chore`.
   - Semver labels (`semver:major|minor|patch`) are inferred from commit messages and used by CD tagging on merge to `main`.
+
+- **TypeScript type vs interface convention**:
+  - Use `interface` to define behavioral contracts intended to be implemented by classes (e.g., dependency injection boundaries, service abstractions).
+  - Use `type` for defining the shape of data models, DTOs, and value objects — anything that describes structure rather than behavior.
+
+## Post implementation
+
+- Make sure the code is well-formatted as per the project's linting rules.
+- Never commit changes or create pull requests unless explicitly asked.

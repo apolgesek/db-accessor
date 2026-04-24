@@ -27,9 +27,14 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const groups = claims['cognito:groups'] as string[] | undefined;
+    const rawGroups = claims['cognito:groups'];
+    const groups: string[] = Array.isArray(rawGroups)
+      ? rawGroups
+      : typeof rawGroups === 'string'
+      ? rawGroups.split(',')
+      : [];
 
-    if (!groups?.includes('ADMIN')) {
+    if (!groups.includes('ADMIN')) {
       return APIResponse.error(401, 'Unauthorized');
     }
 
@@ -67,57 +72,59 @@ class LambdaHandler {
       key[SK_NAME] = result.value.targetSK;
     }
 
-    if (SK_NAME && result.value.operator === 'EQUALS') {
-      const resp = await targetDbClient.send(
-        new GetCommand({
-          TableName: result.value.table,
-          Key: key,
-          ConsistentRead: false,
-        }),
-      );
+    if (result.value.pkOperator !== 'BEGINS_WITH') {
+      if (SK_NAME && result.value.skOperator === 'EQUALS') {
+        const resp = await targetDbClient.send(
+          new GetCommand({
+            TableName: result.value.table,
+            Key: key,
+            ConsistentRead: false,
+          }),
+        );
 
-      if (!resp.Item) {
-        return APIResponse.error(404);
-      }
-    } else {
-      const params: QueryCommandInput = {
-        TableName: result.value.table,
-        ExpressionAttributeNames: { '#pk': PK_NAME },
-        ExpressionAttributeValues: {
-          ':pk': result.value.targetPK,
-        },
-        ConsistentRead: false,
-      };
-
-      if (
-        SK_NAME &&
-        result.value.targetSK != null &&
-        params.ExpressionAttributeNames &&
-        params.ExpressionAttributeValues
-      ) {
-        params.ExpressionAttributeNames['#sk'] = SK_NAME;
-        params.ExpressionAttributeValues[':sk'] = result.value.targetSK;
-        params.KeyConditionExpression =
-          result.value.operator === 'BEGINS_WITH'
-            ? '#pk = :pk AND begins_with(#sk, :sk)'
-            : `#pk = :pk AND #sk ${result.value.operator} :sk`;
+        if (!resp.Item) {
+          return APIResponse.error(404);
+        }
       } else {
-        params.KeyConditionExpression = '#pk = :pk';
-      }
+        const params: QueryCommandInput = {
+          TableName: result.value.table,
+          ExpressionAttributeNames: { '#pk': PK_NAME },
+          ExpressionAttributeValues: {
+            ':pk': result.value.targetPK,
+          },
+          ConsistentRead: false,
+        };
 
-      const resp = await targetDbClient.send(new QueryCommand(params));
+        if (
+          SK_NAME &&
+          result.value.targetSK != null &&
+          params.ExpressionAttributeNames &&
+          params.ExpressionAttributeValues
+        ) {
+          params.ExpressionAttributeNames['#sk'] = SK_NAME;
+          params.ExpressionAttributeValues[':sk'] = result.value.targetSK;
+          params.KeyConditionExpression =
+            result.value.skOperator === 'BEGINS_WITH'
+              ? '#pk = :pk AND begins_with(#sk, :sk)'
+              : `#pk = :pk AND #sk ${result.value.skOperator} :sk`;
+        } else {
+          params.KeyConditionExpression = '#pk = :pk';
+        }
 
-      if (!resp.Items || resp.Items.length === 0) {
-        return APIResponse.error(404);
+        const resp = await targetDbClient.send(new QueryCommand(params));
+
+        if (!resp.Items || resp.Items.length === 0) {
+          return APIResponse.error(404);
+        }
       }
     }
 
-    const { region, accountId, table, targetPK, targetSK, ruleset, operator } = result.value;
+    const { region, accountId, table, targetPK, targetSK, ruleset, pkOperator, skOperator } = result.value;
 
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
     const dateNow = Date.now();
     const createdAt = new Date(dateNow).toISOString();
-    const scopeKey = getRulesetScopeKey(targetPK, targetSK, operator);
+    const scopeKey = getRulesetScopeKey(targetPK, targetSK, pkOperator, skOperator);
 
     const historyItem: Record<string, unknown> = {
       PK: getRulesetHistoryPk(accountId),
@@ -137,9 +144,13 @@ class LambdaHandler {
       GSI_ACCOUNT_REGION_TABLE_SK: getRulesetAccountRegionTableSk(dateNow, scopeKey),
     };
 
+    if (pkOperator) {
+      historyItem['pkOperator'] = pkOperator;
+    }
+
     if (targetSK) {
       historyItem['targetSK'] = targetSK;
-      historyItem['operator'] = operator;
+      historyItem['skOperator'] = skOperator;
     }
 
     await docClient.send(
@@ -184,7 +195,8 @@ class LambdaHandler {
                 ':emptyActiveRulesets': {},
                 ':scope': {
                   targetPK,
-                  ...(targetSK ? { targetSK, operator } : {}),
+                  ...(pkOperator ? { pkOperator } : {}),
+                  ...(targetSK ? { targetSK, skOperator } : {}),
                   ruleset,
                   updatedAt: createdAt,
                 },

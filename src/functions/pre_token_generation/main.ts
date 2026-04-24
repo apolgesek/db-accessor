@@ -36,7 +36,7 @@ class LambdaHandler {
     const rawIdcGroups = userAttributes['custom:idc_groups'] || '';
     const idcGroupIds = parseFlattenedIdpAttribute(rawIdcGroups);
 
-    const roleSet = new Set();
+    const roleSet = new Set<string>();
 
     for (const groupId of idcGroupIds) {
       const role = GROUP_ID_TO_ROLE[groupId];
@@ -46,15 +46,14 @@ class LambdaHandler {
     }
 
     const effectiveGroups = roleSet.size > 0 ? Array.from(roleSet) : groupConfig.groupsToOverride || [];
-    const groupOverrideDetails: Record<string, any> = {
-      groupsToOverride: effectiveGroups,
-      iamRolesToOverride: groupConfig.iamRolesToOverride || [],
-      preferredRole: groupConfig.preferredRole || null,
-    };
 
     event.response = {
       claimsAndScopeOverrideDetails: {
-        groupOverrideDetails,
+        groupOverrideDetails: {
+          groupsToOverride: effectiveGroups,
+          iamRolesToOverride: groupConfig.iamRolesToOverride || [],
+          preferredRole: groupConfig.preferredRole,
+        },
       },
     };
 

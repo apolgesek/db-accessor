@@ -30,11 +30,14 @@ describe('ruleset helpers', () => {
   });
 
   it('creates deterministic and distinct scope keys', () => {
-    expect(getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS')).toBe(
-      getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS'),
+    expect(getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS', 'EQUALS')).toBe(
+      getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS', 'EQUALS'),
     );
-    expect(getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS')).not.toBe(
-      getRulesetScopeKey('USER#1', 'PROFILE#2', 'EQUALS'),
+    expect(getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS', 'EQUALS')).not.toBe(
+      getRulesetScopeKey('USER#1', 'PROFILE#2', 'EQUALS', 'EQUALS'),
+    );
+    expect(getRulesetScopeKey('USER#1', 'PROFILE#1', 'BEGINS_WITH', 'EQUALS')).not.toBe(
+      getRulesetScopeKey('USER#1', 'PROFILE#1', 'EQUALS', 'EQUALS'),
     );
   });
 
@@ -45,14 +48,14 @@ describe('ruleset helpers', () => {
           exact: {
             targetPK: 'USER#1',
             targetSK: 'PROFILE#1',
-            operator: 'EQUALS',
+            skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }],
           },
           prefix: {
             targetPK: 'USER#1',
             targetSK: 'ORDER#',
-            operator: 'BEGINS_WITH',
+            skOperator: 'BEGINS_WITH',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'payments[].cardNumber' }],
           },
@@ -60,6 +63,56 @@ describe('ruleset helpers', () => {
         { targetPK: 'USER#1', targetSK: 'ORDER#100' },
       ),
     ).toEqual(['payments[].cardNumber']);
+  });
+
+  it('matches BEGINS_WITH on PK only', () => {
+    expect(
+      resolveActiveMaskRuleset(
+        {
+          pkPrefix: {
+            targetPK: 'USER#',
+            pkOperator: 'BEGINS_WITH',
+            updatedAt: '2026-04-23T00:00:00.000Z',
+            ruleset: [{ path: 'ssn' }],
+          },
+        },
+        { targetPK: 'USER#42' },
+      ),
+    ).toEqual(['ssn']);
+  });
+
+  it('matches BEGINS_WITH on both PK and SK', () => {
+    expect(
+      resolveActiveMaskRuleset(
+        {
+          both: {
+            targetPK: 'USER#',
+            targetSK: 'ORDER#',
+            pkOperator: 'BEGINS_WITH',
+            skOperator: 'BEGINS_WITH',
+            updatedAt: '2026-04-23T00:00:00.000Z',
+            ruleset: [{ path: 'payments[].cardNumber' }],
+          },
+        },
+        { targetPK: 'USER#99', targetSK: 'ORDER#5' },
+      ),
+    ).toEqual(['payments[].cardNumber']);
+  });
+
+  it('does not match when PK prefix does not fit', () => {
+    expect(
+      resolveActiveMaskRuleset(
+        {
+          pkPrefix: {
+            targetPK: 'USER#',
+            pkOperator: 'BEGINS_WITH',
+            updatedAt: '2026-04-23T00:00:00.000Z',
+            ruleset: [{ path: 'ssn' }],
+          },
+        },
+        { targetPK: 'ORG#42' },
+      ),
+    ).toBeNull();
   });
 
   it('merges and deduplicates matching paths', () => {
@@ -74,7 +127,7 @@ describe('ruleset helpers', () => {
           exact: {
             targetPK: 'USER#1',
             targetSK: 'PROFILE#1',
-            operator: 'EQUALS',
+            skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }, { path: 'phone' }],
           },
@@ -91,7 +144,7 @@ describe('ruleset helpers', () => {
           exact: {
             targetPK: 'USER#2',
             targetSK: 'PROFILE#1',
-            operator: 'EQUALS',
+            skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }],
           },
