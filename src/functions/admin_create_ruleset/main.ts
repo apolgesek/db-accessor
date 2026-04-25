@@ -5,6 +5,7 @@ import {
   QueryCommand,
   QueryCommandInput,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
@@ -153,6 +154,38 @@ class LambdaHandler {
       historyItem['skOperator'] = skOperator;
     }
 
+    // Initialize the snapshot item and activeRulesets map before the transactional write.
+    // This call is idempotent — all writes are guarded by if_not_exists.
+    await docClient.send(
+      new UpdateCommand({
+        TableName: process.env.RULESET_TABLE_NAME,
+        Key: {
+          PK: getRulesetSnapshotPk(accountId, region, table),
+          SK: ACTIVE_RULESET_SK,
+        },
+        UpdateExpression: `SET
+          #entityType = if_not_exists(#entityType, :entityType),
+          #accountId = if_not_exists(#accountId, :accountId),
+          #region = if_not_exists(#region, :region),
+          #table = if_not_exists(#table, :table),
+          #activeRulesets = if_not_exists(#activeRulesets, :emptyActiveRulesets)`,
+        ExpressionAttributeNames: {
+          '#entityType': 'entityType',
+          '#accountId': 'accountId',
+          '#region': 'region',
+          '#table': 'table',
+          '#activeRulesets': 'activeRulesets',
+        },
+        ExpressionAttributeValues: {
+          ':entityType': 'ACTIVE_RULESET',
+          ':accountId': accountId,
+          ':region': region,
+          ':table': table,
+          ':emptyActiveRulesets': {},
+        },
+      }),
+    );
+
     await docClient.send(
       new TransactWriteCommand({
         TransactItems: [
@@ -169,27 +202,13 @@ class LambdaHandler {
                 PK: getRulesetSnapshotPk(accountId, region, table),
                 SK: ACTIVE_RULESET_SK,
               },
-              UpdateExpression: `SET
-                #entityType = if_not_exists(#entityType, :entityType),
-                #accountId = if_not_exists(#accountId, :accountId),
-                #region = if_not_exists(#region, :region),
-                #table = if_not_exists(#table, :table),
-                #updatedAt = :updatedAt,
-                #activeRulesets.#scopeKey = :scope`,
+              UpdateExpression: `SET #updatedAt = :updatedAt, #activeRulesets.#scopeKey = :scope`,
               ExpressionAttributeNames: {
-                '#entityType': 'entityType',
-                '#accountId': 'accountId',
-                '#region': 'region',
-                '#table': 'table',
                 '#updatedAt': 'updatedAt',
                 '#activeRulesets': 'activeRulesets',
                 '#scopeKey': scopeKey,
               },
               ExpressionAttributeValues: {
-                ':entityType': 'ACTIVE_RULESET',
-                ':accountId': accountId,
-                ':region': region,
-                ':table': table,
                 ':updatedAt': createdAt,
                 ':scope': {
                   targetPK,
