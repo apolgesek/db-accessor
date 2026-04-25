@@ -10,7 +10,6 @@ export const requestSchema = Joi.object({
     .items(
       Joi.object({
         path: Joi.string().max(255).required(),
-        ruleDescription: Joi.string().max(255).optional(),
       }),
     )
     .required(),
