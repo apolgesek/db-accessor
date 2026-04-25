@@ -175,7 +175,6 @@ class LambdaHandler {
                 #region = if_not_exists(#region, :region),
                 #table = if_not_exists(#table, :table),
                 #updatedAt = :updatedAt,
-                #activeRulesets = if_not_exists(#activeRulesets, :emptyActiveRulesets),
                 #activeRulesets.#scopeKey = :scope`,
               ExpressionAttributeNames: {
                 '#entityType': 'entityType',
@@ -192,7 +191,6 @@ class LambdaHandler {
                 ':region': region,
                 ':table': table,
                 ':updatedAt': createdAt,
-                ':emptyActiveRulesets': {},
                 ':scope': {
                   targetPK,
                   ...(pkOperator ? { pkOperator } : {}),
