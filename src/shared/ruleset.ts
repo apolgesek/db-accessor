@@ -2,7 +2,6 @@ import { createHash } from 'crypto';
 
 export type RulesetRule = {
   path: string;
-  ruleDescription?: string;
 };
 
 export type RulesetOperator = 'BEGINS_WITH' | 'EQUALS';
