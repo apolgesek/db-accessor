@@ -13,6 +13,7 @@ export type ActiveRulesetScope = {
   skOperator?: RulesetOperator;
   ruleset: RulesetRule[];
   updatedAt: string;
+  version?: number;
 };
 
 export type ActiveRulesetSnapshot = {
