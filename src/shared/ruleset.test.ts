@@ -10,19 +10,25 @@ import {
   getRulesetSnapshotPk,
   resolveActiveMaskRuleset,
 } from './ruleset';
+import { getTimeBucket } from './time.util';
 
 describe('ruleset helpers', () => {
   it('builds keys for all required access patterns', () => {
-    expect(getRulesetHistoryPk('123456789012')).toBe('ACCOUNT#123456789012');
-    expect(getRulesetHistorySk(1713866823000, 'eu-west-1', 'Customers', 'scope-1')).toBe(
+    const ts = 1713866823000; // 2024-04-23T11:47:03Z
+    const bucket = getTimeBucket(ts);
+    expect(bucket).toBe('2024-04');
+    expect(getRulesetHistoryPk('123456789012', bucket)).toBe('ACCOUNT#123456789012#2024-04');
+    expect(getRulesetHistorySk(ts, 'eu-west-1', 'Customers', 'scope-1')).toBe(
       '1713866823000#eu-west-1#Customers#scope-1',
     );
-    expect(getRulesetAccountRegionPk('123456789012', 'eu-west-1')).toBe('ACCOUNT_REGION#123456789012#eu-west-1');
-    expect(getRulesetAccountRegionSk(1713866823000, 'Customers', 'scope-1')).toBe('1713866823000#Customers#scope-1');
-    expect(getRulesetAccountRegionTablePk('123456789012', 'eu-west-1', 'Customers')).toBe(
-      'ACCOUNT_REGION_TABLE#123456789012#eu-west-1#Customers',
+    expect(getRulesetAccountRegionPk('123456789012', 'eu-west-1', bucket)).toBe(
+      'ACCOUNT_REGION#123456789012#eu-west-1#2024-04',
     );
-    expect(getRulesetAccountRegionTableSk(1713866823000, 'scope-1')).toBe('1713866823000#scope-1');
+    expect(getRulesetAccountRegionSk(ts, 'Customers', 'scope-1')).toBe('1713866823000#Customers#scope-1');
+    expect(getRulesetAccountRegionTablePk('123456789012', 'eu-west-1', 'Customers', bucket)).toBe(
+      'ACCOUNT_REGION_TABLE#123456789012#eu-west-1#Customers#2024-04',
+    );
+    expect(getRulesetAccountRegionTableSk(ts, 'scope-1')).toBe('1713866823000#scope-1');
     expect(getRulesetSnapshotPk('123456789012', 'eu-west-1', 'Customers')).toBe(
       'ACTIVE_RULESET#123456789012#eu-west-1#Customers',
     );

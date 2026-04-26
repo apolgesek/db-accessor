@@ -28,8 +28,8 @@ export type ActiveRulesetSnapshot = {
 
 export const ACTIVE_RULESET_SK = 'ACTIVE';
 
-export function getRulesetHistoryPk(accountId: string): string {
-  return `ACCOUNT#${accountId}`;
+export function getRulesetHistoryPk(accountId: string, timeBucket: string): string {
+  return `ACCOUNT#${accountId}#${timeBucket}`;
 }
 
 export function getRulesetHistorySk(
@@ -41,16 +41,21 @@ export function getRulesetHistorySk(
   return `${createdAtTimestamp}#${region}#${table}#${scopeKey}`;
 }
 
-export function getRulesetAccountRegionPk(accountId: string, region: string): string {
-  return `ACCOUNT_REGION#${accountId}#${region}`;
+export function getRulesetAccountRegionPk(accountId: string, region: string, timeBucket: string): string {
+  return `ACCOUNT_REGION#${accountId}#${region}#${timeBucket}`;
 }
 
 export function getRulesetAccountRegionSk(createdAtTimestamp: number, table: string, scopeKey: string): string {
   return `${createdAtTimestamp}#${table}#${scopeKey}`;
 }
 
-export function getRulesetAccountRegionTablePk(accountId: string, region: string, table: string): string {
-  return `ACCOUNT_REGION_TABLE#${accountId}#${region}#${table}`;
+export function getRulesetAccountRegionTablePk(
+  accountId: string,
+  region: string,
+  table: string,
+  timeBucket: string,
+): string {
+  return `ACCOUNT_REGION_TABLE#${accountId}#${region}#${table}#${timeBucket}`;
 }
 
 export function getRulesetAccountRegionTableSk(createdAtTimestamp: number, scopeKey: string): string {

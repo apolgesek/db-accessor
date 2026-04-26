@@ -11,6 +11,7 @@ import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 import { EntityRequest } from '../../shared/entity-request';
+import { getTimeBucket } from '../../shared/time.util';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -61,7 +62,7 @@ class LambdaHandler {
     }
 
     const dateNow = Date.now();
-    const yearMonth = new Date(dateNow).toISOString().slice(0, 7);
+    const yearMonth = getTimeBucket(dateNow);
 
     const claims = event.requestContext?.authorizer?.claims ?? {};
     const username = claims.username.split('db-accessor_')[1];
