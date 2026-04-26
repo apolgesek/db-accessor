@@ -62,10 +62,10 @@ npm run synth
 - **CI/CD coupling to commit style**:
   - PRs enforce conventional commit types: `feat`, `fix`, `refactor`, `chore`.
   - Semver labels (`semver:major|minor|patch`) are inferred from commit messages and used by CD tagging on merge to `main`.
-
 - **TypeScript type vs interface convention**:
   - Use `interface` to define behavioral contracts intended to be implemented by classes (e.g., dependency injection boundaries, service abstractions).
   - Use `type` for defining the shape of data models, DTOs, and value objects — anything that describes structure rather than behavior.
+- **Line ending convention**: LF only (`\n`), no CRLF (`\r\n`), to avoid cross-platform issues and maintain consistency in diffs.
 
 ## Post implementation
 

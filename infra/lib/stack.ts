@@ -159,6 +159,12 @@ export class DbAccessorStack extends cdk.Stack {
     );
     rulesetTable.grantWriteData(adminCreateRulesetFn);
 
+    const adminGetRulesetFn = createLambda(this, projectName, 'admin-get-ruleset', {
+      RULESET_TABLE_NAME: rulesetTable.tableName,
+      ...sharedVars,
+    });
+    rulesetTable.grantReadData(adminGetRulesetFn);
+
     const api = new apigw.RestApi(this, 'ServerlessRestApi', {
       deployOptions: { stageName: props.stage },
     });
@@ -230,6 +236,12 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'POST'],
     });
 
+    const adminGetRuleset = adminResource.addResource('ruleset');
+    adminGetRuleset.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'GET'],
+    });
+
     // Import the Cognito User Pool using the ID from shared vars
     const importedUserPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', sharedVars.COGNITO_USER_POOL_ID);
     // Create a Cognito authorizer for API Gateway
@@ -286,6 +298,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
     adminCreateRuleset.addMethod('POST', new apigw.LambdaIntegration(adminCreateRulesetFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
+    adminGetRuleset.addMethod('GET', new apigw.LambdaIntegration(adminGetRulesetFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],

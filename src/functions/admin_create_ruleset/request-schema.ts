@@ -21,4 +21,5 @@ export const requestSchema = Joi.object({
     then: Joi.required(),
     otherwise: Joi.forbidden(),
   }),
+  version: Joi.number().integer().min(1).optional(),
 });

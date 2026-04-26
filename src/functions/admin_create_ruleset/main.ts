@@ -1,4 +1,4 @@
-import { DescribeTableCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, DescribeTableCommand, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
@@ -121,13 +121,15 @@ class LambdaHandler {
       }
     }
 
-    const { region, accountId, table, targetPK, targetSK, ruleset, pkOperator, skOperator } = result.value;
+    const { region, accountId, table, targetPK, targetSK, ruleset, pkOperator, skOperator, version } = result.value;
 
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
     const dateNow = Date.now();
     const createdAt = new Date(dateNow).toISOString();
     const timeBucket = getTimeBucket(dateNow);
     const scopeKey = getRulesetScopeKey(targetPK, targetSK, pkOperator, skOperator);
+    const isNewScope = version == null;
+    const nextVersion = (version ?? 0) + 1;
 
     const historyItem: Record<string, unknown> = {
       PK: getRulesetHistoryPk(accountId, timeBucket),
@@ -188,43 +190,67 @@ class LambdaHandler {
       }),
     );
 
-    await docClient.send(
-      new TransactWriteCommand({
-        TransactItems: [
-          {
-            Put: {
-              TableName: process.env.RULESET_TABLE_NAME,
-              Item: historyItem,
+    const scopeConditionExpression = isNewScope
+      ? 'attribute_not_exists(#activeRulesets.#scopeKey)'
+      : '#activeRulesets.#scopeKey.#version = :expectedVersion';
+
+    const updateExpressionAttributeNames: Record<string, string> = {
+      '#updatedAt': 'updatedAt',
+      '#activeRulesets': 'activeRulesets',
+      '#scopeKey': scopeKey,
+      ...(isNewScope ? {} : { '#version': 'version' }),
+    };
+
+    const updateExpressionAttributeValues: Record<string, unknown> = {
+      ':updatedAt': createdAt,
+      ':scope': {
+        targetPK,
+        ...(pkOperator ? { pkOperator } : {}),
+        ...(targetSK ? { targetSK, skOperator } : {}),
+        ruleset,
+        updatedAt: createdAt,
+        version: nextVersion,
+      },
+      ...(isNewScope ? {} : { ':expectedVersion': version }),
+    };
+
+    try {
+      await docClient.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: process.env.RULESET_TABLE_NAME,
+                Item: historyItem,
+                ConditionExpression: 'attribute_not_exists(PK)',
+              },
             },
-          },
-          {
-            Update: {
-              TableName: process.env.RULESET_TABLE_NAME,
-              Key: {
-                PK: getRulesetSnapshotPk(accountId, region, table),
-                SK: ACTIVE_RULESET_SK,
-              },
-              UpdateExpression: `SET #updatedAt = :updatedAt, #activeRulesets.#scopeKey = :scope`,
-              ExpressionAttributeNames: {
-                '#updatedAt': 'updatedAt',
-                '#activeRulesets': 'activeRulesets',
-                '#scopeKey': scopeKey,
-              },
-              ExpressionAttributeValues: {
-                ':updatedAt': createdAt,
-                ':scope': {
-                  targetPK,
-                  ...(pkOperator ? { pkOperator } : {}),
-                  ...(targetSK ? { targetSK, skOperator } : {}),
-                  ruleset,
-                  updatedAt: createdAt,
+            {
+              Update: {
+                TableName: process.env.RULESET_TABLE_NAME,
+                Key: {
+                  PK: getRulesetSnapshotPk(accountId, region, table),
+                  SK: ACTIVE_RULESET_SK,
                 },
+                UpdateExpression: `SET #updatedAt = :updatedAt, #activeRulesets.#scopeKey = :scope`,
+                ConditionExpression: scopeConditionExpression,
+                ExpressionAttributeNames: updateExpressionAttributeNames,
+                ExpressionAttributeValues: updateExpressionAttributeValues,
               },
             },
-          },
-        ],
-      }),
-    );
+          ],
+        }),
+      );
+    } catch (err) {
+      if (err instanceof TransactionCanceledException) {
+        const reasons = err.CancellationReasons ?? [];
+        if (reasons.some((r) => r.Code === 'ConditionalCheckFailed')) {
+          return APIResponse.error(409, 'Ruleset was modified by another user');
+        }
+      }
+
+      throw err;
+    }
 
     return APIResponse.success(201, { id: scopeKey });
   }
