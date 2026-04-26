@@ -22,6 +22,7 @@ import {
   getRulesetSnapshotPk,
 } from '../../shared/ruleset';
 import { requestSchema } from './request-schema';
+import { getTimeBucket } from '../../shared/time.util';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -125,10 +126,11 @@ class LambdaHandler {
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
     const dateNow = Date.now();
     const createdAt = new Date(dateNow).toISOString();
+    const timeBucket = getTimeBucket(dateNow);
     const scopeKey = getRulesetScopeKey(targetPK, targetSK, pkOperator, skOperator);
 
     const historyItem: Record<string, unknown> = {
-      PK: getRulesetHistoryPk(accountId),
+      PK: getRulesetHistoryPk(accountId, timeBucket),
       SK: getRulesetHistorySk(dateNow, region, table, scopeKey),
       entityType: 'RULESET_HISTORY',
       createdAt,
@@ -139,9 +141,9 @@ class LambdaHandler {
       targetPK,
       ruleset,
       scopeKey,
-      GSI_ACCOUNT_REGION_PK: getRulesetAccountRegionPk(accountId, region),
+      GSI_ACCOUNT_REGION_PK: getRulesetAccountRegionPk(accountId, region, timeBucket),
       GSI_ACCOUNT_REGION_SK: getRulesetAccountRegionSk(dateNow, table, scopeKey),
-      GSI_ACCOUNT_REGION_TABLE_PK: getRulesetAccountRegionTablePk(accountId, region, table),
+      GSI_ACCOUNT_REGION_TABLE_PK: getRulesetAccountRegionTablePk(accountId, region, table, timeBucket),
       GSI_ACCOUNT_REGION_TABLE_SK: getRulesetAccountRegionTableSk(dateNow, scopeKey),
     };
 
