@@ -95,45 +95,47 @@ class LambdaHandler {
 
     const accessor = new RecordAccessor(targetDbClient, this.ddbClient);
     const result = await accessor.getRecord({ ...item, pkName, skName });
+    const createdAt = new Date().toISOString();
+
     await this.ddbClient.send(
       new PutItemCommand({
         TableName: process.env.AUDIT_LOGS_TABLE_NAME,
         Item: {
           UserId: { S: item.userId },
-          CreatedAt: { N: new Date().getTime().toString() },
+          CreatedAt: { S: createdAt },
           TableName: { S: item.table },
           TargetPK: { S: item.targetPK },
           TargetSK: { S: item.targetSK || 'N/A' },
         },
       }),
     );
-    await this.publishIssueTrackingAuditEvent(item);
+    await this.publishIssueTrackingAuditEvent(item, createdAt);
 
     return APIResponse.success(200, { ...result, request: item });
   }
 
-  private async publishIssueTrackingAuditEvent(item: EntityRequest): Promise<void> {
+  private async publishIssueTrackingAuditEvent(item: EntityRequest, createdAt: string): Promise<void> {
     const issueKey = 'FEYES-5';
-
+    const requestId = item.SK.split('#').at(-1) ?? '';
     try {
       await this.issueTrackingAuditPublisher.publish({
         version: 1,
         eventType: 'RECORD_ACCESSED',
         issueKey,
         userId: item.userId,
-        requestId: item.requestId,
+        requestId,
         tableName: item.table,
         targetPK: item.targetPK,
         targetSK: item.targetSK || 'N/A',
         accountId: item.accountId,
         region: item.region,
-        dateTime: new Date().toISOString(),
         stage: process.env.STAGE,
+        dateTime: createdAt,
       });
     } catch (err) {
       console.warn('Failed to enqueue issue tracking audit event', {
         issueKey,
-        requestId: item.requestId,
+        requestId,
         error: err instanceof Error ? err.message : String(err),
       });
     }
