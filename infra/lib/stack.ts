@@ -4,7 +4,10 @@ import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as cr from 'aws-cdk-lib/custom-resources';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
 import { parse } from '@aws-sdk/util-arn-parser';
@@ -50,6 +53,27 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    const issueTrackingAuditDlq = new sqs.Queue(this, `${projectName}-issue-tracking-audit-dlq`, {
+      queueName: `${projectName}-issue-tracking-audit-dlq`,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const issueTrackingAuditQueue = new sqs.Queue(this, `${projectName}-issue-tracking-audit-queue`, {
+      queueName: `${projectName}-issue-tracking-audit-queue`,
+      retentionPeriod: cdk.Duration.days(4),
+      visibilityTimeout: cdk.Duration.seconds(60),
+      deadLetterQueue: {
+        queue: issueTrackingAuditDlq,
+        maxReceiveCount: 3,
+      },
+    });
+
+    const issueTrackingSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      `${projectName}-issue-tracking-secret`,
+      `${props.projectName}/${props.stage}/issue-tracking`,
+    );
+
     rulesetTable.addGlobalSecondaryIndex({
       indexName: 'GSI_ACCOUNT_REGION',
       partitionKey: { name: 'GSI_ACCOUNT_REGION_PK', type: dynamodb.AttributeType.STRING },
@@ -82,12 +106,34 @@ export class DbAccessorStack extends cdk.Stack {
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+      ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
       RULESET_TABLE_NAME: rulesetTable.tableName,
+      STAGE: props.stage,
       ...sharedVars,
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
+    issueTrackingAuditQueue.grantSendMessages(getRecordFn);
     rulesetTable.grantReadData(getRecordFn);
+
+    const issueTrackingAuditWorkerFn = createLambda(
+      this,
+      projectName,
+      'issue-tracking-audit-worker',
+      {
+        ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
+        ISSUE_TRACKING_SECRET_NAME: issueTrackingSecret.secretName,
+      },
+      { timeout: cdk.Duration.seconds(30) },
+    );
+    issueTrackingSecret.grantRead(issueTrackingAuditWorkerFn);
+    issueTrackingAuditQueue.grantConsumeMessages(issueTrackingAuditWorkerFn);
+    issueTrackingAuditWorkerFn.addEventSource(
+      new lambdaEventSources.SqsEventSource(issueTrackingAuditQueue, {
+        batchSize: 5,
+        reportBatchItemFailures: true,
+      }),
+    );
 
     const managementAccountId = '058264309711';
     const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];

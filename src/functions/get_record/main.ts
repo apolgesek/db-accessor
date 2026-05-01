@@ -7,10 +7,12 @@ import {
   PutItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { EntityRequest } from '../../shared/entity-request';
 import { getStsSession } from '../../shared/get-sts-session';
+import { IssueTrackingAuditEvent } from '../../shared/issue-tracking-audit-event';
 import { APIResponse } from '../../shared/response';
 import {
   ACTIVE_RULESET_SK,
@@ -23,8 +25,33 @@ import { base64urlDecode, toJsonSafe } from './utils';
 
 const MS_IN_HOUR = 3_600_000;
 
+interface IIssueTrackingAuditPublisher {
+  publish(event: IssueTrackingAuditEvent): Promise<void>;
+}
+
+export class SqsIssueTrackingAuditPublisher implements IIssueTrackingAuditPublisher {
+  constructor(private readonly sqsClient: SQSClient, private readonly queueUrl?: string) {}
+
+  async publish(event: IssueTrackingAuditEvent): Promise<void> {
+    if (!this.queueUrl) {
+      console.warn('Issue tracking audit queue URL is not configured');
+      return;
+    }
+
+    await this.sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: this.queueUrl,
+        MessageBody: JSON.stringify(event),
+      }),
+    );
+  }
+}
+
 class LambdaHandler {
-  constructor(private readonly ddbClient: DynamoDBClient) {}
+  constructor(
+    private readonly ddbClient: DynamoDBClient,
+    private readonly issueTrackingAuditPublisher: IIssueTrackingAuditPublisher,
+  ) {}
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
@@ -80,8 +107,36 @@ class LambdaHandler {
         },
       }),
     );
+    await this.publishIssueTrackingAuditEvent(item);
 
     return APIResponse.success(200, { ...result, request: item });
+  }
+
+  private async publishIssueTrackingAuditEvent(item: EntityRequest): Promise<void> {
+    const issueKey = 'FEYES-5';
+
+    try {
+      await this.issueTrackingAuditPublisher.publish({
+        version: 1,
+        eventType: 'RECORD_ACCESSED',
+        issueKey,
+        userId: item.userId,
+        requestId: item.requestId,
+        tableName: item.table,
+        targetPK: item.targetPK,
+        targetSK: item.targetSK || 'N/A',
+        accountId: item.accountId,
+        region: item.region,
+        dateTime: new Date().toISOString(),
+        stage: process.env.STAGE,
+      });
+    } catch (err) {
+      console.warn('Failed to enqueue issue tracking audit event', {
+        issueKey,
+        requestId: item.requestId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 
@@ -147,5 +202,11 @@ class RecordAccessor {
   }
 }
 
-const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
+const handlerInstance = new LambdaHandler(
+  new DynamoDBClient({ region: process.env.AWS_REGION }),
+  new SqsIssueTrackingAuditPublisher(
+    new SQSClient({ region: process.env.AWS_REGION }),
+    process.env.ISSUE_TRACKING_AUDIT_QUEUE_URL,
+  ),
+);
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

@@ -9,6 +9,7 @@ export function createLambda(
   projectName: string,
   fnName: string,
   environment?: Record<string, string>,
+  options?: { timeout?: cdk.Duration },
 ) {
   const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
 
@@ -22,6 +23,7 @@ export function createLambda(
     runtime: node22,
     architecture: lambda.Architecture.X86_64,
     environment,
+    timeout: options?.timeout,
     bundling: { minify: true, sourceMap: true, target: 'es2020' },
   });
 
