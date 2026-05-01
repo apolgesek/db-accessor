@@ -95,14 +95,14 @@ class LambdaHandler {
 
     const accessor = new RecordAccessor(targetDbClient, this.ddbClient);
     const result = await accessor.getRecord({ ...item, pkName, skName });
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date().getTime().toString();
 
     await this.ddbClient.send(
       new PutItemCommand({
         TableName: process.env.AUDIT_LOGS_TABLE_NAME,
         Item: {
           UserId: { S: item.userId },
-          CreatedAt: { S: createdAt },
+          CreatedAt: { N: createdAt },
           TableName: { S: item.table },
           TargetPK: { S: item.targetPK },
           TargetSK: { S: item.targetSK || 'N/A' },
