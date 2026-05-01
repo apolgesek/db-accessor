@@ -13,6 +13,8 @@
     "@aws-sdk/client-iam": "^3.864.0",
     "@aws-sdk/client-identitystore": "^3.948.0",
     "@aws-sdk/client-organizations": "^3.962.0",
+    "@aws-sdk/client-secrets-manager": "^3.1040.0",
+    "@aws-sdk/client-sqs": "^3.1040.0",
     "@aws-sdk/client-ssm": "^3.962.0",
     "@aws-sdk/client-sso-admin": "^3.948.0",
     "@aws-sdk/client-sts": "^3.948.0",
