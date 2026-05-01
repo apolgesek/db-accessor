@@ -93,6 +93,8 @@ export class IssueTrackingClient {
     const issueKey = encodeURIComponent(event.issueKey || 'FEYES-5');
     const url = `https://${domain}/rest/api/3/issue/${issueKey}/comment`;
     const auth = Buffer.from(`${secret.email}:${secret.apiToken}`).toString('base64');
+    const body = JSON.stringify({ body: buildCommentDocument(event) });
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -100,8 +102,9 @@ export class IssueTrackingClient {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ body: buildCommentDocument(event) }),
+      body,
     });
+    console.log(url, auth, body);
 
     if (!response.ok) {
       const responseBody = await response.text();
