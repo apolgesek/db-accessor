@@ -139,7 +139,7 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
     `Request: ${event.requestId}`,
     `Table: ${event.tableName}`,
     `Target PK: ${event.targetPK}`,
-    `Target SK: ${event.targetSK}`,
+    `Target SK: ${event.targetSK ?? 'N/A'}`,
     `Account: ${event.accountId}`,
     `Region: ${event.region}`,
     `Occurred at: ${event.dateTime}`,
@@ -182,7 +182,6 @@ function parseIssueTrackingAuditEvent(body: string): IssueTrackingAuditEvent {
     !event.requestId ||
     !event.tableName ||
     !event.targetPK ||
-    !event.targetSK ||
     !event.accountId ||
     !event.region ||
     !event.dateTime
