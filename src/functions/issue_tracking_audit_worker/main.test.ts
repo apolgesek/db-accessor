@@ -72,7 +72,7 @@ describe('IssueTrackingClient', () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true } as Response);
     const credentialsProvider = {
       getCredentials: jest.fn().mockResolvedValue({
-        domain: 'https://4eyes.atlassian.net/',
+        cloudId: 'cloud-id-1',
         email: 'service@example.com',
         apiToken: 'token-1',
       }),
@@ -83,7 +83,7 @@ describe('IssueTrackingClient', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://4eyes.atlassian.net/rest/api/3/issue/FEYES-5/comment');
+    expect(url).toBe('https://api.atlassian.com/ex/jira/cloud-id-1/rest/api/3/issue/FEYES-5/comment');
     expect(init?.headers).toMatchObject({
       Authorization: `Basic ${Buffer.from('service@example.com:token-1').toString('base64')}`,
       Accept: 'application/json',

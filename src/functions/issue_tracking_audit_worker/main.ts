@@ -7,7 +7,7 @@ const BASE_BACKOFF_SECONDS = 30;
 const MAX_BACKOFF_SECONDS = 1_800;
 
 type IssueTrackingSecret = {
-  domain: string;
+  cloudId: string;
   email: string;
   apiToken: string;
 };
@@ -89,9 +89,8 @@ export class IssueTrackingClient {
 
   async addAuditComment(event: IssueTrackingAuditEvent): Promise<void> {
     const secret = await this.credentialsProvider.getCredentials();
-    const domain = normalizeDomain(secret.domain);
     const issueKey = encodeURIComponent(event.issueKey || 'FEYES-5');
-    const url = `https://${domain}/rest/api/3/issue/${issueKey}/comment`;
+    const url = `https://api.atlassian.com/ex/jira/${secret.cloudId}/rest/api/3/issue/${issueKey}/comment`;
     const auth = Buffer.from(`${secret.email}:${secret.apiToken}`).toString('base64');
     const body = JSON.stringify({ body: buildCommentDocument(event) });
 
@@ -163,12 +162,12 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
 function parseIssueTrackingSecret(secretString: string): IssueTrackingSecret {
   const secret = JSON.parse(secretString) as Partial<IssueTrackingSecret>;
 
-  if (!secret.domain || !secret.email || !secret.apiToken) {
-    throw new Error('Issue tracking secret must include domain, email, and apiToken');
+  if (!secret.cloudId || !secret.email || !secret.apiToken) {
+    throw new Error('Issue tracking secret must include cloudId, email, and apiToken');
   }
 
   return {
-    domain: secret.domain,
+    cloudId: secret.cloudId,
     email: secret.email,
     apiToken: secret.apiToken,
   };
@@ -193,10 +192,6 @@ function parseIssueTrackingAuditEvent(body: string): IssueTrackingAuditEvent {
   }
 
   return event as IssueTrackingAuditEvent;
-}
-
-function normalizeDomain(domain: string): string {
-  return domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
 const handlerInstance = new IssueTrackingAuditWorker(
