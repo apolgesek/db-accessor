@@ -178,10 +178,12 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
   return {
     type: 'doc',
     version: 1,
-    content: details.map((text) => ({
-      type: 'paragraph',
-      content: [{ type: 'text', text }],
-    })),
+    content: [
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: details.join(' | ') }],
+      },
+    ],
   };
 }
 

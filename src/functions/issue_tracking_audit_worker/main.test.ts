@@ -44,13 +44,15 @@ function makeRecord(overrides: Partial<SQSRecord> = {}): SQSRecord {
 }
 
 describe('issue tracking audit worker helpers', () => {
-  test('builds ADF comment without record contents', () => {
+  test('builds compact ADF comment without record contents', () => {
     const document = buildCommentDocument(auditEvent);
     const serialized = JSON.stringify(document);
 
     expect(document.type).toBe('doc');
-    expect(serialized).toContain('User: user-1');
-    expect(serialized).toContain('Table: Customers');
+    expect(document.content).toHaveLength(1);
+    expect(serialized).toContain(
+      'Record access audit | User: user-1 | Request: REQUEST#1 | Table: Customers | Target PK: CUSTOMER#1 | Target SK: N/A | Account: 123456789012 | Region: eu-central-1 | Occurred at: 2026-05-01T12:00:00.000Z | Stage: dev',
+    );
     expect(serialized).not.toContain('item');
   });
 });
