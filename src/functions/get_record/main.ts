@@ -115,8 +115,9 @@ class LambdaHandler {
   }
 
   private async publishIssueTrackingAuditEvent(item: EntityRequest, createdAt: string): Promise<void> {
-    const issueKey = 'FEYES-5';
     const requestId = item.SK.split('#').at(-1) ?? '';
+    const issueKey = item.issueKey;
+
     try {
       await this.issueTrackingAuditPublisher.publish({
         version: 1,
