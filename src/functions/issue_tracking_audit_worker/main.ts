@@ -107,7 +107,7 @@ export class IssueTrackingClient {
 
   async addAuditComment(event: IssueTrackingAuditEvent): Promise<void> {
     const secret = await this.credentialsProvider.getCredentials();
-    const issueKey = encodeURIComponent(event.issueKey || 'FEYES-5');
+    const issueKey = encodeURIComponent(event.issueKey);
     const url = `https://api.atlassian.com/ex/jira/${secret.cloudId}/rest/api/3/issue/${issueKey}/comment`;
     const auth = Buffer.from(`${secret.email}:${secret.apiToken}`).toString('base64');
     const body = JSON.stringify({ body: buildCommentDocument(event) });

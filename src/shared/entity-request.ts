@@ -30,6 +30,7 @@ export type EntityRequest = {
   createdAt: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   reason: string;
+  issueKey: string;
   duration: number;
   region: string;
   table: string;

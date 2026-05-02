@@ -6,6 +6,11 @@ export const requestSchema = Joi.object({
   targetPK: Joi.string().required(),
   targetSK: Joi.string(),
   reason: Joi.string().max(1024).required(),
+  issueKey: Joi.string()
+    .trim()
+    .uppercase()
+    .pattern(/^[A-Z][A-Z0-9_]*-\d+$/)
+    .required(),
   accountId: Joi.string()
     .regex(/^\d{12}$/, { name: '12 digit account ID' })
     .required(),

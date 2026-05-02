@@ -80,6 +80,7 @@ class LambdaHandler {
       targetPK: { S: result.value.targetPK },
       approvedBy: { L: [] },
       reason: { S: result.value.reason },
+      issueKey: { S: result.value.issueKey },
       GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
       GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
       GSI_PENDING_PK: { S: 'PENDING' },
