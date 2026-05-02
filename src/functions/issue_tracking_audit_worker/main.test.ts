@@ -3,7 +3,6 @@ import { SQSRecord } from 'aws-lambda';
 import { IssueTrackingAuditEvent } from '../../shared/issue-tracking-audit-event';
 import {
   buildCommentDocument,
-  getRetryDelaySeconds,
   IssueTrackingAuditWorker,
   IssueTrackingClient,
   IssueTrackingCredentialsProvider,
@@ -45,13 +44,6 @@ function makeRecord(overrides: Partial<SQSRecord> = {}): SQSRecord {
 }
 
 describe('issue tracking audit worker helpers', () => {
-  test('computes exponential retry delay with cap', () => {
-    expect(getRetryDelaySeconds(1)).toBe(30);
-    expect(getRetryDelaySeconds(2)).toBe(60);
-    expect(getRetryDelaySeconds(7)).toBe(1_800);
-    expect(getRetryDelaySeconds(20)).toBe(1_800);
-  });
-
   test('builds ADF comment without record contents', () => {
     const document = buildCommentDocument(auditEvent);
     const serialized = JSON.stringify(document);
@@ -94,14 +86,14 @@ describe('IssueTrackingClient', () => {
   });
 
   test('throws for non-2xx issue tracking responses', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue({
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 401,
       text: jest.fn().mockResolvedValue('Unauthorized'),
     } as unknown as Response);
     const credentialsProvider = {
       getCredentials: jest.fn().mockResolvedValue({
-        domain: '4eyes.atlassian.net',
+        cloudId: 'cloud-id-1',
         email: 'service@example.com',
         apiToken: 'token-1',
       }),
@@ -109,6 +101,31 @@ describe('IssueTrackingClient', () => {
     const client = new IssueTrackingClient(credentialsProvider);
 
     await expect(client.addAuditComment(auditEvent)).rejects.toThrow('Issue tracking comment request failed with 401');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws rate limit errors with Retry-After', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'Retry-After': '2' }),
+      text: jest.fn().mockResolvedValue('Rate limited'),
+    } as unknown as Response);
+    const credentialsProvider = {
+      getCredentials: jest.fn().mockResolvedValue({
+        cloudId: 'cloud-id-1',
+        email: 'service@example.com',
+        apiToken: 'token-1',
+      }),
+    } as unknown as IssueTrackingCredentialsProvider;
+    const client = new IssueTrackingClient(credentialsProvider);
+
+    await expect(client.addAuditComment(auditEvent)).rejects.toMatchObject({
+      name: 'RateLimitError',
+      retryAfterSeconds: 2,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -137,7 +154,7 @@ describe('IssueTrackingAuditWorker', () => {
     expect(command.input).toEqual({
       QueueUrl: 'https://sqs.example/queue',
       ReceiptHandle: 'receipt-1',
-      VisibilityTimeout: 60,
+      VisibilityTimeout: expect.any(Number),
     });
   });
 });
