@@ -1,10 +1,16 @@
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { ChangeMessageVisibilityCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
+import { fetchWithTimeout, RequestTimeoutOptions } from '../../shared/fetch.util';
 import { IssueTrackingAuditEvent } from '../../shared/issue-tracking-audit-event';
+import {
+  getRateLimitRetryDelaySeconds,
+  getRetryDelaySeconds,
+  parseRetryAfterSeconds,
+  RateLimitError,
+} from '../../shared/retry.util';
 
-const BASE_BACKOFF_SECONDS = 30;
-const MAX_BACKOFF_SECONDS = 1_800;
+const ISSUE_TRACKING_POST_TIMEOUT_MS = 3_000;
 
 type IssueTrackingSecret = {
   cloudId: string;
@@ -29,6 +35,7 @@ export class IssueTrackingAuditWorker {
     private readonly issueTrackingClient: IssueTrackingClient,
     private readonly sqsClient: SQSClient,
     private readonly queueUrl?: string,
+    private readonly random: () => number = Math.random,
   ) {}
 
   async handle(event: SQSEvent): Promise<SQSBatchResponse> {
@@ -44,7 +51,7 @@ export class IssueTrackingAuditWorker {
           error: err instanceof Error ? err.message : String(err),
         });
 
-        await this.delayRetry(record);
+        await this.delayRetry(record, err);
         batchItemFailures.push({ itemIdentifier: record.messageId });
       }
     }
@@ -57,14 +64,18 @@ export class IssueTrackingAuditWorker {
     await this.issueTrackingClient.addAuditComment(auditEvent);
   }
 
-  private async delayRetry(record: SQSRecord): Promise<void> {
+  private async delayRetry(record: SQSRecord, err: unknown): Promise<void> {
     if (!this.queueUrl) {
       console.warn('Issue tracking audit queue URL is not configured; using queue default visibility timeout');
       return;
     }
 
     const receiveCount = Number.parseInt(record.attributes.ApproximateReceiveCount || '1', 10);
-    const visibilityTimeout = getRetryDelaySeconds(Number.isNaN(receiveCount) ? 1 : receiveCount);
+    const retryCount = Number.isNaN(receiveCount) ? 1 : receiveCount;
+    const visibilityTimeout =
+      err instanceof RateLimitError
+        ? getRateLimitRetryDelaySeconds(retryCount, err.retryAfterSeconds, this.random())
+        : getRetryDelaySeconds(retryCount);
 
     try {
       await this.sqsClient.send(
@@ -85,7 +96,14 @@ export class IssueTrackingAuditWorker {
 }
 
 export class IssueTrackingClient {
-  constructor(private readonly credentialsProvider: IssueTrackingCredentialsProvider) {}
+  private readonly requestTimeoutMs: number;
+
+  constructor(
+    private readonly credentialsProvider: IssueTrackingCredentialsProvider,
+    options: RequestTimeoutOptions = {},
+  ) {
+    this.requestTimeoutMs = options.requestTimeoutMs ?? ISSUE_TRACKING_POST_TIMEOUT_MS;
+  }
 
   async addAuditComment(event: IssueTrackingAuditEvent): Promise<void> {
     const secret = await this.credentialsProvider.getCredentials();
@@ -94,21 +112,33 @@ export class IssueTrackingClient {
     const auth = Buffer.from(`${secret.email}:${secret.apiToken}`).toString('base64');
     const body = JSON.stringify({ body: buildCommentDocument(event) });
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+    await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body,
       },
-      body,
-    });
-    console.log(url, auth, body);
+      this.requestTimeoutMs,
+      async (response) => {
+        if (response.ok) return;
 
-    if (!response.ok) {
-      const responseBody = await response.text();
-      throw new Error(`Issue tracking comment request failed with ${response.status}: ${responseBody}`);
-    }
+        const responseBody = await response.text();
+
+        if (response.status === 429) {
+          throw new RateLimitError(
+            `Issue tracking comment request rate limited with 429: ${responseBody}`,
+            parseRetryAfterSeconds(response.headers.get('Retry-After')),
+          );
+        }
+
+        throw new Error(`Issue tracking comment request failed with ${response.status}: ${responseBody}`);
+      },
+    );
   }
 }
 
@@ -128,10 +158,6 @@ export class IssueTrackingCredentialsProvider {
     this.cachedSecret = secret;
     return secret;
   }
-}
-
-export function getRetryDelaySeconds(receiveCount: number): number {
-  return Math.min(BASE_BACKOFF_SECONDS * 2 ** Math.max(receiveCount - 1, 0), MAX_BACKOFF_SECONDS);
 }
 
 export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianDocument {
