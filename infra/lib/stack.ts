@@ -12,6 +12,7 @@ import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
 import { createRequestStatusEmailPolicyStatement } from './request-status-email-policy';
+import { createRequesterEmailPolicyStatement } from './requester-email-policy';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
@@ -103,11 +104,11 @@ export class DbAccessorStack extends cdk.Stack {
       GRANTS_TABLE_NAME: grantTable.tableName,
       COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
       COGNITO_CLIENT_ID: props.cognitoClientId,
+      USERNAME_PREFIX: `${props.projectName}_`,
     };
     const requestStatusEmailSource = 'noreply@4eyesdb.com';
     const requestStatusEmailVars = {
       REQUEST_STATUS_EMAIL_SOURCE: requestStatusEmailSource,
-      REQUEST_STATUS_EMAIL_RECIPIENT: requestStatusEmailSource,
     };
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
@@ -206,6 +207,8 @@ export class DbAccessorStack extends cdk.Stack {
     grantTable.grantReadWriteData(adminRejectRequestFn);
     adminApproveRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
     adminRejectRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
+    adminApproveRequestFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
+    adminRejectRequestFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
     const adminCreateRulesetFn = createLambda(this, projectName, 'admin-create-ruleset', {
       RULESET_TABLE_NAME: rulesetTable.tableName,
       ...sharedVars,

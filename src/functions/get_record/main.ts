@@ -20,6 +20,7 @@ import {
   getRulesetSnapshotPk,
   resolveActiveMaskRuleset,
 } from '../../shared/ruleset';
+import { toAppUsername } from '../../shared/username';
 import { DEFAULT_REDACTION, PathPatternRedactor } from './redactor';
 import { base64urlDecode, toJsonSafe } from './utils';
 
@@ -55,7 +56,7 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const username = claims.username.split('db-accessor_')[1];
+    const username = toAppUsername(claims.username);
     const pathParams = event.pathParameters || {};
     const getItemResponse = await this.ddbClient.send(
       new GetItemCommand({

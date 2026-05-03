@@ -5,11 +5,16 @@ import { requestSchema } from './request-schema';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { RequestStatusEmailNotifier, SesRequestStatusEmailNotifier } from '../../shared/request-status-email';
 import { SESv2Client } from '@aws-sdk/client-sesv2';
+import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoRequesterEmailProvider, RequesterEmailProvider } from '../../shared/requester-email';
+import { EntityRequest } from '../../shared/entity-request';
+import { toAppUsername } from '../../shared/username';
 
 class LambdaHandler {
   constructor(
     private readonly ddbClient: DynamoDBClient,
     private readonly requestStatusEmailNotifier: RequestStatusEmailNotifier,
+    private readonly requesterEmailProvider: RequesterEmailProvider,
   ) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
@@ -44,8 +49,8 @@ class LambdaHandler {
     if (!getItemResponse.Item) {
       return APIResponse.error(404, 'Record not found');
     }
-
-    const username = claims.username.split('db-accessor_')[1];
+    const existingItem = unmarshall(getItemResponse.Item) as EntityRequest;
+    const username = toAppUsername(claims.username);
     const updateItemCmd = new UpdateItemCommand({
       TableName: process.env.GRANTS_TABLE_NAME,
       Key: {
@@ -77,7 +82,8 @@ class LambdaHandler {
     });
     await this.ddbClient.send(updateItemCmd);
     try {
-      await this.requestStatusEmailNotifier.sendTestMessage();
+      const requesterEmail = await this.requesterEmailProvider.getEmail(existingItem.userId);
+      await this.requestStatusEmailNotifier.sendTestMessage(requesterEmail);
     } catch (error) {
       console.warn('Failed to send request status email', { error, PK: body.PK, SK: body.SK });
     }
@@ -91,5 +97,6 @@ class LambdaHandler {
 const handlerInstance = new LambdaHandler(
   new DynamoDBClient({ region: process.env.AWS_REGION }),
   new SesRequestStatusEmailNotifier(new SESv2Client({ region: process.env.AWS_REGION })),
+  new CognitoRequesterEmailProvider(new CognitoIdentityProviderClient({ region: process.env.AWS_REGION })),
 );
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);
