@@ -4,6 +4,7 @@ import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { EntityRequest } from '../../shared/entity-request';
 import { APIResponse } from '../../shared/response';
+import { toAppUsername } from '../../shared/username';
 import { requestSchema } from './request-schema';
 
 class LambdaHandler {
@@ -18,7 +19,7 @@ class LambdaHandler {
     }
 
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const username = claims.username.split('db-accessor_')[1];
+    const username = toAppUsername(claims.username);
     const decodedRequestId = atob(event.pathParameters?.id ?? '');
     const rootRequest = await this.ddbClient.send(
       new GetItemCommand({

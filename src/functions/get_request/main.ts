@@ -3,6 +3,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { ApprovedBy, EntityRequest } from '../../shared/entity-request';
+import { toAppUsername } from '../../shared/username';
 
 const MS_IN_HOUR = 3_600_000;
 
@@ -12,7 +13,7 @@ class LambdaHandler {
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     try {
       const claims = event.requestContext?.authorizer?.claims ?? {};
-      const username = claims.username.split('db-accessor_')[1];
+      const username = toAppUsername(claims.username);
       const pk = `USER#${username}`;
 
       let items: EntityRequest[] = [];

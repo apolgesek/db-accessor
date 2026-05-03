@@ -12,6 +12,7 @@ import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 import { EntityRequest } from '../../shared/entity-request';
 import { getTimeBucket } from '../../shared/time.util';
+import { toAppUsername } from '../../shared/username';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -65,7 +66,7 @@ class LambdaHandler {
     const yearMonth = getTimeBucket(dateNow);
 
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const username = claims.username.split('db-accessor_')[1];
+    const username = toAppUsername(claims.username);
     const requestId = crypto.randomUUID();
     const item: Partial<Record<keyof EntityRequest, AttributeValue>> = {
       PK: { S: `USER#${username}` },
