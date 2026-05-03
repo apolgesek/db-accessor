@@ -1,16 +1,17 @@
-﻿import * as cdk from 'aws-cdk-lib';
+﻿import { parse } from '@aws-sdk/util-arn-parser';
+import * as cdk from 'aws-cdk-lib';
 import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
-import * as cr from 'aws-cdk-lib/custom-resources';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
-import { parse } from '@aws-sdk/util-arn-parser';
+import { createRequestStatusEmailPolicyStatement } from './request-status-email-policy';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
@@ -103,6 +104,11 @@ export class DbAccessorStack extends cdk.Stack {
       COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
       COGNITO_CLIENT_ID: props.cognitoClientId,
     };
+    const requestStatusEmailSource = 'noreply@4eyesdb.com';
+    const requestStatusEmailVars = {
+      REQUEST_STATUS_EMAIL_SOURCE: requestStatusEmailSource,
+      REQUEST_STATUS_EMAIL_RECIPIENT: requestStatusEmailSource,
+    };
 
     const getRecordFn = createLambda(this, projectName, 'get-record', {
       AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
@@ -188,10 +194,18 @@ export class DbAccessorStack extends cdk.Stack {
     grantTable.grantReadData(getRequestFn);
     const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
     grantTable.grantReadData(adminGetRequestFn);
-    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', sharedVars);
+    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
+      ...sharedVars,
+      ...requestStatusEmailVars,
+    });
     grantTable.grantReadWriteData(adminApproveRequestFn);
-    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', sharedVars);
+    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', {
+      ...sharedVars,
+      ...requestStatusEmailVars,
+    });
     grantTable.grantReadWriteData(adminRejectRequestFn);
+    adminApproveRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
+    adminRejectRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
     const adminCreateRulesetFn = createLambda(this, projectName, 'admin-create-ruleset', {
       RULESET_TABLE_NAME: rulesetTable.tableName,
       ...sharedVars,

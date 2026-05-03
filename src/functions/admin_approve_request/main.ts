@@ -3,9 +3,14 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import { RequestStatusEmailNotifier, SesRequestStatusEmailNotifier } from '../../shared/request-status-email';
+import { SESv2Client } from '@aws-sdk/client-sesv2';
 
 class LambdaHandler {
-  constructor(private readonly ddbClient: DynamoDBClient) {}
+  constructor(
+    private readonly ddbClient: DynamoDBClient,
+    private readonly requestStatusEmailNotifier: RequestStatusEmailNotifier,
+  ) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
@@ -76,6 +81,11 @@ class LambdaHandler {
     });
 
     await this.ddbClient.send(updateItemCmd);
+    try {
+      await this.requestStatusEmailNotifier.sendTestMessage();
+    } catch (error) {
+      console.warn('Failed to send request status email', { error, PK: body.PK, SK: body.SK });
+    }
     const updatedItemResponse = await this.ddbClient.send(getItemCmd);
     const updatedItem = unmarshall(updatedItemResponse.Item as Record<string, AttributeValue>);
 
@@ -83,5 +93,8 @@ class LambdaHandler {
   }
 }
 
-const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
+const handlerInstance = new LambdaHandler(
+  new DynamoDBClient({ region: process.env.AWS_REGION }),
+  new SesRequestStatusEmailNotifier(new SESv2Client({ region: process.env.AWS_REGION })),
+);
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

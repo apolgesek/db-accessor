@@ -21,14 +21,36 @@ type IssueTrackingSecret = {
 type AtlassianDocument = {
   type: 'doc';
   version: 1;
-  content: Array<{
-    type: 'paragraph';
-    content: Array<{
-      type: 'text';
-      text: string;
-    }>;
-  }>;
+  content: AtlassianBlockNode[];
 };
+
+type AtlassianTextNode = {
+  type: 'text';
+  text: string;
+};
+
+type AtlassianParagraphNode = {
+  type: 'paragraph';
+  content: AtlassianTextNode[];
+};
+
+type AtlassianHeadingNode = {
+  type: 'heading';
+  attrs: {
+    level: 4;
+  };
+  content: AtlassianTextNode[];
+};
+
+type AtlassianPanelNode = {
+  type: 'panel';
+  attrs: {
+    panelType: 'info';
+  };
+  content: Array<AtlassianHeadingNode | AtlassianParagraphNode>;
+};
+
+type AtlassianBlockNode = AtlassianParagraphNode | AtlassianPanelNode;
 
 export class IssueTrackingAuditWorker {
   constructor(
@@ -161,6 +183,7 @@ export class IssueTrackingCredentialsProvider {
 }
 
 export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianDocument {
+  const occurredAt = new Date(event.dateTime).toISOString();
   const details = [
     `Record access audit`,
     `User: ${event.userId}`,
@@ -170,7 +193,7 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
     `Target SK: ${event.targetSK ?? 'N/A'}`,
     `Account: ${event.accountId}`,
     `Region: ${event.region}`,
-    `Occurred at: ${event.dateTime}`,
+    `Occurred at: ${occurredAt}`,
   ];
 
   if (event.stage) details.push(`Stage: ${event.stage}`);
@@ -180,8 +203,19 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
     version: 1,
     content: [
       {
-        type: 'paragraph',
-        content: [{ type: 'text', text: details.join(' | ') }],
+        type: 'panel',
+        attrs: { panelType: 'info' },
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 4 },
+            content: [{ type: 'text', text: 'Record read audit log' }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: details.join(' | ') }],
+          },
+        ],
       },
     ],
   };
