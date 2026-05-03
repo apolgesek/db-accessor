@@ -44,12 +44,23 @@ function makeRecord(overrides: Partial<SQSRecord> = {}): SQSRecord {
 }
 
 describe('issue tracking audit worker helpers', () => {
-  test('builds compact ADF comment without record contents', () => {
+  test('builds compact ADF info panel comment without record contents', () => {
     const document = buildCommentDocument(auditEvent);
     const serialized = JSON.stringify(document);
 
     expect(document.type).toBe('doc');
     expect(document.content).toHaveLength(1);
+    expect(document.content[0]).toMatchObject({
+      type: 'panel',
+      attrs: { panelType: 'info' },
+      content: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'heading',
+          attrs: { level: 4 },
+          content: [{ type: 'text', text: 'Record read audit log' }],
+        }),
+      ]),
+    });
     expect(serialized).toContain(
       'Record access audit | User: user-1 | Request: REQUEST#1 | Table: Customers | Target PK: CUSTOMER#1 | Target SK: N/A | Account: 123456789012 | Region: eu-central-1 | Occurred at: 2026-05-01T12:00:00.000Z | Stage: dev',
     );
