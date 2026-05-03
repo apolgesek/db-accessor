@@ -89,7 +89,17 @@ class LambdaHandler {
     await this.ddbClient.send(updateItemCmd);
     try {
       const requesterEmail = await this.requesterEmailProvider.getEmail(existingItem.userId);
-      await this.requestStatusEmailNotifier.sendTestMessage(requesterEmail);
+      const requestId = existingItem.SK.split('#')[2] ?? existingItem.SK;
+      await this.requestStatusEmailNotifier.sendRequestStatusMessage({
+        recipientEmail: requesterEmail,
+        status: 'APPROVED',
+        id: requestId,
+        accountId: existingItem.accountId,
+        region: existingItem.region,
+        targetPK: existingItem.targetPK,
+        targetSK: existingItem.targetSK,
+        reason: existingItem.reason,
+      });
     } catch (error) {
       console.warn('Failed to send request status email', { error, PK: body.PK, SK: body.SK });
     }
