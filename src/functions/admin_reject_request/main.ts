@@ -1,23 +1,23 @@
 import { AttributeValue, DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { requestSchema } from './request-schema';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
-import { RequestStatusEmailNotifier, SesRequestStatusEmailNotifier } from '../../shared/request-status-email';
-import { SESv2Client } from '@aws-sdk/client-sesv2';
-import { CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
-import { CognitoRequesterEmailProvider, RequesterEmailProvider } from '../../shared/requester-email';
 import { EntityRequest } from '../../shared/entity-request';
 import { toAppUsername } from '../../shared/username';
+import {
+  RequestStatusEventPublisher,
+  SnsRequestStatusEventPublisher,
+} from '../../shared/request-status-event-publisher';
+import { SNSClient } from '@aws-sdk/client-sns';
 
 class LambdaHandler {
   constructor(
     private readonly ddbClient: DynamoDBClient,
-    private readonly requestStatusEmailNotifier: RequestStatusEmailNotifier,
-    private readonly requesterEmailProvider: RequesterEmailProvider,
+    private readonly eventPublisher: RequestStatusEventPublisher,
   ) {}
 
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
     const rawGroups = claims?.['cognito:groups'];
     const groups: string[] = Array.isArray(rawGroups)
@@ -51,6 +51,7 @@ class LambdaHandler {
     }
     const existingItem = unmarshall(getItemResponse.Item) as EntityRequest;
     const username = toAppUsername(claims.username);
+    const rejectedAt = new Date().toISOString();
     const updateItemCmd = new UpdateItemCommand({
       TableName: process.env.GRANTS_TABLE_NAME,
       Key: {
@@ -76,27 +77,35 @@ class LambdaHandler {
         ':status': { S: 'REJECTED' },
         ':comment': { S: body.comment || '' },
         ':rejectedBy': {
-          M: { username: { S: username }, rejectedAt: { S: new Date().toISOString() }, role: { S: 'ADMIN' } },
+          M: { username: { S: username }, rejectedAt: { S: rejectedAt }, role: { S: 'ADMIN' } },
         },
       },
     });
     await this.ddbClient.send(updateItemCmd);
-    try {
-      const requesterEmail = await this.requesterEmailProvider.getEmail(existingItem.userId);
-      const requestId = existingItem.SK.split('#')[2] ?? existingItem.SK;
-      await this.requestStatusEmailNotifier.sendRequestStatusMessage({
-        recipientEmail: requesterEmail,
-        status: 'REJECTED',
-        id: requestId,
+    await this.eventPublisher.publish({
+      version: 1,
+      eventType: 'RequestRejected',
+      status: 'REJECTED',
+      decidedAt: rejectedAt,
+      actor: {
+        role: 'ADMIN',
+        username,
+      },
+      request: {
+        PK: existingItem.PK,
+        SK: existingItem.SK,
         accountId: existingItem.accountId,
         region: existingItem.region,
+        table: existingItem.table,
         targetPK: existingItem.targetPK,
         targetSK: existingItem.targetSK,
         reason: existingItem.reason,
-      });
-    } catch (error) {
-      console.warn('Failed to send request status email', { error, PK: body.PK, SK: body.SK });
-    }
+        userId: existingItem.userId,
+        issueKey: existingItem.issueKey,
+        comment: body.comment || '',
+      },
+      stage: process.env.STAGE,
+    });
     const updatedItemResponse = await this.ddbClient.send(getItemCmd);
     const updatedItem = unmarshall(updatedItemResponse.Item as Record<string, AttributeValue>);
 
@@ -106,7 +115,6 @@ class LambdaHandler {
 
 const handlerInstance = new LambdaHandler(
   new DynamoDBClient({ region: process.env.AWS_REGION }),
-  new SesRequestStatusEmailNotifier(new SESv2Client({ region: process.env.AWS_REGION })),
-  new CognitoRequesterEmailProvider(new CognitoIdentityProviderClient({ region: process.env.AWS_REGION })),
+  new SnsRequestStatusEventPublisher(new SNSClient({ region: process.env.AWS_REGION })),
 );
 export const lambdaHandler = handlerInstance.handle.bind(handlerInstance);

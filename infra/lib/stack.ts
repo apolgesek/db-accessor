@@ -2,11 +2,15 @@
 import * as cdk from 'aws-cdk-lib';
 import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
@@ -55,6 +59,27 @@ export class DbAccessorStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
+    const notificationTable = new dynamodb.Table(this, `${projectName}-notifications`, {
+      tableName: `${projectName}-notifications`,
+      partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'CreatedAt', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const websocketConnectionTable = new dynamodb.Table(this, `${projectName}-websocket-connections`, {
+      tableName: `${projectName}-websocket-connections`,
+      partitionKey: { name: 'ConnectionId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'Ttl',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    websocketConnectionTable.addGlobalSecondaryIndex({
+      indexName: 'GSI_USER_ID',
+      partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
+    });
+
     const issueTrackingAuditDlq = new sqs.Queue(this, `${projectName}-issue-tracking-audit-dlq`, {
       queueName: `${projectName}-issue-tracking-audit-dlq`,
       retentionPeriod: cdk.Duration.days(14),
@@ -69,6 +94,51 @@ export class DbAccessorStack extends cdk.Stack {
         maxReceiveCount: 3,
       },
     });
+
+    const requestStatusTopic = new sns.Topic(this, `${projectName}-request-status-topic`, {
+      topicName: `${projectName}-request-status`,
+    });
+
+    const requestStatusEmailDlq = new sqs.Queue(this, `${projectName}-request-status-email-dlq`, {
+      queueName: `${projectName}-request-status-email-dlq`,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const requestStatusEmailQueue = new sqs.Queue(this, `${projectName}-request-status-email-queue`, {
+      queueName: `${projectName}-request-status-email-queue`,
+      retentionPeriod: cdk.Duration.days(4),
+      visibilityTimeout: cdk.Duration.seconds(60),
+      deadLetterQueue: {
+        queue: requestStatusEmailDlq,
+        maxReceiveCount: 3,
+      },
+    });
+
+    const requestStatusNotificationDlq = new sqs.Queue(this, `${projectName}-request-status-notification-dlq`, {
+      queueName: `${projectName}-request-status-notification-dlq`,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const requestStatusNotificationQueue = new sqs.Queue(this, `${projectName}-request-status-notification-queue`, {
+      queueName: `${projectName}-request-status-notification-queue`,
+      retentionPeriod: cdk.Duration.days(4),
+      visibilityTimeout: cdk.Duration.seconds(60),
+      deadLetterQueue: {
+        queue: requestStatusNotificationDlq,
+        maxReceiveCount: 3,
+      },
+    });
+
+    requestStatusTopic.addSubscription(
+      new snsSubscriptions.SqsSubscription(requestStatusEmailQueue, {
+        rawMessageDelivery: true,
+      }),
+    );
+    requestStatusTopic.addSubscription(
+      new snsSubscriptions.SqsSubscription(requestStatusNotificationQueue, {
+        rawMessageDelivery: true,
+      }),
+    );
 
     const issueTrackingSecret = secretsmanager.Secret.fromSecretNameV2(
       this,
@@ -142,6 +212,96 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
+    const websocketConnectFn = createLambda(this, projectName, 'websocket-connect', {
+      WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+      ...sharedVars,
+    });
+    websocketConnectionTable.grantWriteData(websocketConnectFn);
+
+    const websocketDisconnectFn = createLambda(this, projectName, 'websocket-disconnect', {
+      WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+    });
+    websocketConnectionTable.grantWriteData(websocketDisconnectFn);
+
+    const websocketApi = new apigwv2.WebSocketApi(this, `${projectName}-websocket-api`, {
+      apiName: `${projectName}-notifications`,
+      connectRouteOptions: {
+        integration: new apigwv2Integrations.WebSocketLambdaIntegration(
+          `${projectName}-websocket-connect-integration`,
+          websocketConnectFn,
+        ),
+      },
+      disconnectRouteOptions: {
+        integration: new apigwv2Integrations.WebSocketLambdaIntegration(
+          `${projectName}-websocket-disconnect-integration`,
+          websocketDisconnectFn,
+        ),
+      },
+    });
+
+    new apigwv2.WebSocketStage(this, `${projectName}-websocket-stage`, {
+      webSocketApi: websocketApi,
+      stageName: props.stage,
+      autoDeploy: true,
+    });
+
+    const websocketEndpoint = cdk.Fn.sub('https://${ApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${Stage}', {
+      ApiId: websocketApi.apiId,
+      Stage: props.stage,
+    });
+
+    const requestStatusEmailWorkerFn = createLambda(
+      this,
+      projectName,
+      'request-status-email-worker',
+      {
+        ...sharedVars,
+        ...requestStatusEmailVars,
+      },
+      { timeout: cdk.Duration.seconds(30) },
+    );
+    requestStatusEmailQueue.grantConsumeMessages(requestStatusEmailWorkerFn);
+    requestStatusEmailWorkerFn.addToRolePolicy(
+      createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource),
+    );
+    requestStatusEmailWorkerFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
+    requestStatusEmailWorkerFn.addEventSource(
+      new lambdaEventSources.SqsEventSource(requestStatusEmailQueue, {
+        batchSize: 5,
+        reportBatchItemFailures: true,
+      }),
+    );
+
+    const requestStatusNotificationWorkerFn = createLambda(
+      this,
+      projectName,
+      'request-status-notification-worker',
+      {
+        NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
+        WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+        WEBSOCKET_ENDPOINT: websocketEndpoint,
+      },
+      { timeout: cdk.Duration.seconds(30) },
+    );
+    requestStatusNotificationQueue.grantConsumeMessages(requestStatusNotificationWorkerFn);
+    notificationTable.grantWriteData(requestStatusNotificationWorkerFn);
+    websocketConnectionTable.grantReadWriteData(requestStatusNotificationWorkerFn);
+    requestStatusNotificationWorkerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['execute-api:ManageConnections'],
+        resources: [
+          `arn:${stack.partition}:execute-api:${stack.region}:${stack.account}:${websocketApi.apiId}/${props.stage}/POST/@connections/*`,
+        ],
+      }),
+    );
+    requestStatusNotificationWorkerFn.addEventSource(
+      new lambdaEventSources.SqsEventSource(requestStatusNotificationQueue, {
+        batchSize: 5,
+        reportBatchItemFailures: true,
+      }),
+    );
+
     const managementAccountId = '058264309711';
     const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];
 
@@ -197,18 +357,18 @@ export class DbAccessorStack extends cdk.Stack {
     grantTable.grantReadData(adminGetRequestFn);
     const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
       ...sharedVars,
-      ...requestStatusEmailVars,
+      REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
+      STAGE: props.stage,
     });
     grantTable.grantReadWriteData(adminApproveRequestFn);
+    requestStatusTopic.grantPublish(adminApproveRequestFn);
     const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', {
       ...sharedVars,
-      ...requestStatusEmailVars,
+      REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
+      STAGE: props.stage,
     });
     grantTable.grantReadWriteData(adminRejectRequestFn);
-    adminApproveRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
-    adminRejectRequestFn.addToRolePolicy(createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource));
-    adminApproveRequestFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
-    adminRejectRequestFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
+    requestStatusTopic.grantPublish(adminRejectRequestFn);
     const adminCreateRulesetFn = createLambda(this, projectName, 'admin-create-ruleset', {
       RULESET_TABLE_NAME: rulesetTable.tableName,
       ...sharedVars,
@@ -483,6 +643,9 @@ export class DbAccessorStack extends cdk.Stack {
     );
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
+    new cdk.CfnOutput(this, 'WebSocketUrl', {
+      value: `wss://${websocketApi.apiId}.execute-api.${stack.region}.${stack.urlSuffix}/${props.stage}`,
+    });
 
     new cdk.CfnOutput(this, 'GitHubCdkRoleArn', {
       value: cdkRole.roleArn,
