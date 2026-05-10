@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as apigwv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
@@ -218,6 +219,16 @@ export class DbAccessorStack extends cdk.Stack {
     });
     websocketConnectionTable.grantWriteData(websocketConnectFn);
 
+    const websocketAuthorizerFn = createLambda(this, projectName, 'websocket-authorizer', sharedVars);
+    const websocketAuthorizer = new apigwv2Authorizers.WebSocketLambdaAuthorizer(
+      `${projectName}-websocket-authorizer`,
+      websocketAuthorizerFn,
+      {
+        authorizerName: `${projectName}-websocket-authorizer`,
+        identitySource: ['route.request.querystring.token'],
+      },
+    );
+
     const websocketDisconnectFn = createLambda(this, projectName, 'websocket-disconnect', {
       WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
     });
@@ -230,6 +241,7 @@ export class DbAccessorStack extends cdk.Stack {
           `${projectName}-websocket-connect-integration`,
           websocketConnectFn,
         ),
+        authorizer: websocketAuthorizer,
       },
       disconnectRouteOptions: {
         integration: new apigwv2Integrations.WebSocketLambdaIntegration(

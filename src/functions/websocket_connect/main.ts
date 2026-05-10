@@ -35,9 +35,9 @@ class LambdaHandler {
 
 function getUserId(event: APIGatewayProxyEvent): string {
   const authorizer = event.requestContext.authorizer as
-    | { principalId?: string; claims?: { username?: string } }
+    | { principalId?: string; username?: string; claims?: { username?: string } }
     | undefined;
-  const rawUserId = authorizer?.claims?.username ?? authorizer?.principalId ?? event.queryStringParameters?.userId;
+  const rawUserId = authorizer?.claims?.username ?? authorizer?.username ?? authorizer?.principalId;
 
   return rawUserId ? toAppUsername(rawUserId) : '';
 }
