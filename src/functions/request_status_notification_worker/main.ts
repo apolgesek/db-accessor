@@ -166,9 +166,8 @@ class LambdaHandler {
 
     await this.store.save(notification);
 
-    // WebSocket pushes are disabled for now. Notifications are still persisted above.
-    // const connectionIds = await this.store.listConnectionIds(event.request.userId);
-    // await Promise.all(connectionIds.map((connectionId) => this.sendToConnection(connectionId, notification)));
+    const connectionIds = await this.store.listConnectionIds(event.request.userId);
+    await Promise.all(connectionIds.map((connectionId) => this.sendToConnection(connectionId, notification)));
   }
 
   private async sendToConnection(connectionId: string, notification: RequestNotification): Promise<void> {
