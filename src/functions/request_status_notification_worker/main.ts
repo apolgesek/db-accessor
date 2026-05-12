@@ -11,25 +11,8 @@ import {
   PostToConnectionCommand,
 } from '@aws-sdk/client-apigatewaymanagementapi';
 import { SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
+import { RequestNotification } from '../../shared/request-notification';
 import { getRequestIdFromSk, RequestStatusEvent } from '../../shared/request-status-event';
-
-type RequestNotification = {
-  id: string;
-  userId: string;
-  status: 'APPROVED' | 'REJECTED';
-  requestId: string;
-  requestPK: string;
-  requestSK: string;
-  accountId: string;
-  region: string;
-  table: string;
-  targetPK: string;
-  targetSK?: string;
-  reason: string;
-  comment?: string | null;
-  decidedAt: string;
-  actorUsername: string;
-};
 
 class DynamoDbNotificationStore {
   constructor(
