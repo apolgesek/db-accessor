@@ -365,6 +365,11 @@ export class DbAccessorStack extends cdk.Stack {
     grantTable.grantReadWriteData(createUnredactRequestFn);
     const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
     grantTable.grantReadData(getRequestFn);
+    const getNotificationsFn = createLambda(this, projectName, 'get-notifications', {
+      NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
+      ...sharedVars,
+    });
+    notificationTable.grantReadData(getNotificationsFn);
     const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
     grantTable.grantReadData(adminGetRequestFn);
     const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
@@ -465,6 +470,12 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'GET'],
     });
 
+    const notifications = api.root.addResource('notifications');
+    notifications.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'GET'],
+    });
+
     const adminCreateRuleset = adminResource.addResource('create-ruleset');
     adminCreateRuleset.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
@@ -528,6 +539,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
     getTables.addMethod('GET', new apigw.LambdaIntegration(getTablesFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
+    notifications.addMethod('GET', new apigw.LambdaIntegration(getNotificationsFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],
