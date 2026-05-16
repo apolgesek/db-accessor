@@ -25,7 +25,7 @@ class LambdaHandler {
           ScanIndexForward: false,
           KeyConditionExpression: '#pk = :pk',
           ExpressionAttributeNames: {
-            '#pk': 'PK',
+            '#pk': 'pk',
           },
           ExpressionAttributeValues: {
             ':pk': { S: pk },

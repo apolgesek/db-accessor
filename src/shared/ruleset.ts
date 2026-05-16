@@ -7,8 +7,8 @@ export type RulesetRule = {
 export type RulesetOperator = 'BEGINS_WITH' | 'EQUALS';
 
 export type ActiveRulesetScope = {
-  targetPK: string;
-  targetSK?: string;
+  targetPk: string;
+  targetSk?: string;
   pkOperator?: RulesetOperator;
   skOperator?: RulesetOperator;
   ruleset: RulesetRule[];
@@ -17,8 +17,8 @@ export type ActiveRulesetScope = {
 };
 
 export type ActiveRulesetSnapshot = {
-  PK: string;
-  SK: string;
+  pk: string;
+  sk: string;
   entityType: 'ACTIVE_RULESET';
   accountId: string;
   region: string;
@@ -68,13 +68,13 @@ export function getRulesetSnapshotPk(accountId: string, region: string, table: s
 }
 
 export function getRulesetScopeKey(
-  targetPK: string,
-  targetSK?: string,
+  targetPk: string,
+  targetSk?: string,
   pkOperator?: RulesetOperator,
   skOperator?: RulesetOperator,
 ): string {
   return createHash('sha256')
-    .update(`${targetPK}#${targetSK || ''}#${pkOperator || ''}#${skOperator || ''}`)
+    .update(`${targetPk}#${targetSk || ''}#${pkOperator || ''}#${skOperator || ''}`)
     .digest()
     .subarray(0, 12)
     .toString('base64url');
@@ -87,38 +87,38 @@ export function getRulesetPaths(ruleset: RulesetRule[] | undefined): string[] {
 function matchesScope(
   scope: ActiveRulesetScope,
   request: {
-    targetPK: string;
-    targetSK?: string;
+    targetPk: string;
+    targetSk?: string;
   },
 ): boolean {
   if (scope.pkOperator === 'BEGINS_WITH') {
-    if (!request.targetPK.startsWith(scope.targetPK)) {
+    if (!request.targetPk.startsWith(scope.targetPk)) {
       return false;
     }
-  } else if (scope.targetPK !== request.targetPK) {
+  } else if (scope.targetPk !== request.targetPk) {
     return false;
   }
 
-  if (!scope.targetSK) {
+  if (!scope.targetSk) {
     return true;
   }
 
-  if (!request.targetSK) {
+  if (!request.targetSk) {
     return false;
   }
 
   if (scope.skOperator === 'BEGINS_WITH') {
-    return request.targetSK.startsWith(scope.targetSK);
+    return request.targetSk.startsWith(scope.targetSk);
   }
 
-  return request.targetSK === scope.targetSK;
+  return request.targetSk === scope.targetSk;
 }
 
 export function resolveActiveMaskRuleset(
   activeRulesets: Record<string, ActiveRulesetScope> | undefined,
   request: {
-    targetPK: string;
-    targetSK?: string;
+    targetPk: string;
+    targetSk?: string;
   },
 ): string[] | null {
   if (!activeRulesets) {

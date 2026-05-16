@@ -36,11 +36,11 @@ class LambdaHandler {
     await this.requestStatusEmailNotifier.sendRequestStatusMessage({
       recipientEmail: requesterEmail,
       status: event.status,
-      id: getRequestIdFromSk(event.request.SK),
+      id: getRequestIdFromSk(event.request.sk),
       accountId: event.request.accountId,
       region: event.request.region,
-      targetPK: event.request.targetPK,
-      targetSK: event.request.targetSK,
+      targetPk: event.request.targetPk,
+      targetSk: event.request.targetSk,
       reason: event.request.reason,
     });
   }

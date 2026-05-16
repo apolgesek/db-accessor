@@ -13,10 +13,10 @@ export const requestSchema = Joi.object({
       }),
     )
     .required(),
-  targetPK: Joi.string().required(),
-  targetSK: Joi.string().optional(),
+  targetPk: Joi.string().required(),
+  targetSk: Joi.string().optional(),
   pkOperator: Joi.string().valid('BEGINS_WITH', 'EQUALS').optional(),
-  skOperator: Joi.string().valid('BEGINS_WITH', 'EQUALS').when('targetSK', {
+  skOperator: Joi.string().valid('BEGINS_WITH', 'EQUALS').when('targetSk', {
     is: Joi.exist(),
     then: Joi.required(),
     otherwise: Joi.forbidden(),

@@ -1,7 +1,7 @@
 import { AttributeValue, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { RequestNotification, RequestNotificationEntity } from '../../shared/request-notification';
+import { RequestNotification } from '../../shared/request-notification';
 import { APIResponse } from '../../shared/response';
 import { toAppUsername } from '../../shared/username';
 import { decodePaginationCursor, encodePaginationCursor } from '../../shared/pagination';
@@ -14,12 +14,12 @@ class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-    const tableName = process.env.NOTIFICATIONS_TABLE_NAME;
-    if (!tableName) {
+    const table = process.env.NOTIFICATIONS_TABLE_NAME;
+    if (!table) {
       return APIResponse.error(500, 'Missing notifications table configuration');
     }
 
-    const userId = getUserId(event);
+    const userId = getuserId(event);
     if (!userId) {
       return APIResponse.error(401, 'Invalid token');
     }
@@ -32,11 +32,11 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid notifications cursor');
     }
 
-    const { items, nextCursor } = await this.listNotifications(tableName, userId, createdAfter, {
+    const { items, nextCursor } = await this.listNotifications(table, userId, createdAfter, {
       limit,
       exclusiveStartKey,
     });
-    const unreadCount = await this.countUnreadNotifications(tableName, userId, createdAfter);
+    const unreadCount = await this.countUnreadNotifications(table, userId, createdAfter);
 
     return APIResponse.success(200, {
       count: items.length,
@@ -47,7 +47,7 @@ class LambdaHandler {
   }
 
   private async listNotifications(
-    tableName: string,
+    table: string,
     userId: string,
     createdAfter: string,
     page: {
@@ -62,12 +62,12 @@ class LambdaHandler {
       const remainingItems = page.limit - items.length;
       const response = await this.ddbClient.send(
         new QueryCommand({
-          TableName: tableName,
+          TableName: table,
           ScanIndexForward: false,
           KeyConditionExpression: '#userId = :userId AND #createdAt >= :createdAfter',
           ExpressionAttributeNames: {
-            '#userId': 'UserId',
-            '#createdAt': 'CreatedAt',
+            '#userId': 'userId',
+            '#createdAt': 'decidedAt',
           },
           ExpressionAttributeValues: {
             ':userId': { S: userId },
@@ -79,7 +79,7 @@ class LambdaHandler {
       );
 
       for (const item of response.Items ?? []) {
-        items.push(toRequestNotification(unmarshall(item) as RequestNotificationEntity));
+        items.push(unmarshall(item) as RequestNotification);
       }
 
       lastEvaluatedKey = response.LastEvaluatedKey;
@@ -91,21 +91,21 @@ class LambdaHandler {
     };
   }
 
-  private async countUnreadNotifications(tableName: string, userId: string, createdAfter: string): Promise<number> {
+  private async countUnreadNotifications(table: string, userId: string, createdAfter: string): Promise<number> {
     let count = 0;
     let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
 
     do {
       const response = await this.ddbClient.send(
         new QueryCommand({
-          TableName: tableName,
+          TableName: table,
           Select: 'COUNT',
           KeyConditionExpression: '#userId = :userId AND #createdAt >= :createdAfter',
           FilterExpression: 'attribute_not_exists(#readAt)',
           ExpressionAttributeNames: {
-            '#userId': 'UserId',
-            '#createdAt': 'CreatedAt',
-            '#readAt': 'ReadAt',
+            '#userId': 'userId',
+            '#createdAt': 'decidedAt',
+            '#readAt': 'readAt',
           },
           ExpressionAttributeValues: {
             ':userId': { S: userId },
@@ -123,32 +123,11 @@ class LambdaHandler {
   }
 }
 
-function getUserId(event: APIGatewayProxyEvent): string {
+function getuserId(event: APIGatewayProxyEvent): string {
   const claims = event.requestContext?.authorizer?.claims ?? {};
   const username = claims.username;
 
   return typeof username === 'string' ? toAppUsername(username) : '';
-}
-
-function toRequestNotification(item: RequestNotificationEntity): RequestNotification {
-  return {
-    id: item.NotificationId,
-    userId: item.UserId,
-    status: item.Status,
-    requestId: item.RequestId,
-    requestPK: item.RequestPK,
-    requestSK: item.RequestSK,
-    accountId: item.AccountId,
-    region: item.Region,
-    table: item.TableName,
-    targetPK: item.TargetPK,
-    targetSK: item.TargetSK || undefined,
-    reason: item.Reason,
-    comment: item.Comment || undefined,
-    decidedAt: item.CreatedAt,
-    actorUsername: item.ActorUsername,
-    readAt: item.ReadAt,
-  };
 }
 
 function getLimit(value?: string): number {

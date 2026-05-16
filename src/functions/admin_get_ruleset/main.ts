@@ -35,8 +35,8 @@ class LambdaHandler {
       new GetCommand({
         TableName: process.env.RULESET_TABLE_NAME,
         Key: {
-          PK: getRulesetSnapshotPk(accountId, region, table),
-          SK: ACTIVE_RULESET_SK,
+          pk: getRulesetSnapshotPk(accountId, region, table),
+          sk: ACTIVE_RULESET_SK,
         },
       }),
     );

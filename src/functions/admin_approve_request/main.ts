@@ -40,8 +40,8 @@ class LambdaHandler {
     const getItemCmd = new GetItemCommand({
       TableName: process.env.GRANTS_TABLE_NAME,
       Key: {
-        PK: { S: body.PK },
-        SK: { S: body.SK },
+        pk: { S: body.pk },
+        sk: { S: body.sk },
       },
     });
     const getItemResponse = await this.ddbClient.send(getItemCmd);
@@ -56,21 +56,21 @@ class LambdaHandler {
     const updateItemCmd = new UpdateItemCommand({
       TableName: process.env.GRANTS_TABLE_NAME,
       Key: {
-        PK: { S: body.PK },
-        SK: { S: body.SK },
+        pk: { S: body.pk },
+        sk: { S: body.sk },
       },
       UpdateExpression: `
         SET #status = :status,
             #comment = :comment,
             #approvedBy = list_append(#approvedBy, :approvedBy)
-        REMOVE #gsi_pending_pk, #gsi_pending_sk
+        REMOVE #gsiPendingPk, #gsiPendingSk
       `,
       ConditionExpression: '#status = :pendingStatus',
       ExpressionAttributeNames: {
         '#status': 'status',
         '#approvedBy': 'approvedBy',
-        '#gsi_pending_pk': 'GSI_PENDING_PK',
-        '#gsi_pending_sk': 'GSI_PENDING_SK',
+        '#gsiPendingPk': 'gsiPendingPk',
+        '#gsiPendingSk': 'gsiPendingSk',
         '#comment': 'comment',
       },
       ExpressionAttributeValues: {
@@ -98,13 +98,13 @@ class LambdaHandler {
         username,
       },
       request: {
-        PK: existingItem.PK,
-        SK: existingItem.SK,
+        pk: existingItem.pk,
+        sk: existingItem.sk,
         accountId: existingItem.accountId,
         region: existingItem.region,
         table: existingItem.table,
-        targetPK: existingItem.targetPK,
-        targetSK: existingItem.targetSK,
+        targetPk: existingItem.targetPk,
+        targetSk: existingItem.targetSk,
         reason: existingItem.reason,
         userId: existingItem.userId,
         issueKey: existingItem.issueKey,
