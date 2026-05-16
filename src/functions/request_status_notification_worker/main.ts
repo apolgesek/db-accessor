@@ -44,7 +44,6 @@ class DynamoDbNotificationStore {
           Reason: { S: notification.reason },
           Comment: { S: notification.comment ?? '' },
           ActorUsername: { S: notification.actorUsername },
-          Read: { BOOL: false },
         },
       }),
     );
