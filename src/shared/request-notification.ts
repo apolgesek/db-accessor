@@ -14,7 +14,7 @@ export type RequestNotification = {
   comment?: string | null;
   decidedAt: string;
   actorUsername: string;
-  read?: boolean;
+  readAt?: string;
 };
 
 export type RequestNotificationEntity = {
@@ -34,5 +34,5 @@ export type RequestNotificationEntity = {
   Reason: string;
   Comment?: string;
   ActorUsername: string;
-  Read: boolean;
+  ReadAt?: string;
 };

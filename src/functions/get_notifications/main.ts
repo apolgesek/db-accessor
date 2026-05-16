@@ -4,6 +4,11 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { RequestNotification, RequestNotificationEntity } from '../../shared/request-notification';
 import { APIResponse } from '../../shared/response';
 import { toAppUsername } from '../../shared/username';
+import { decodePaginationCursor, encodePaginationCursor } from '../../shared/pagination';
+
+const DEFAULT_PAGE_LIMIT = 20;
+const MAX_PAGE_LIMIT = 50;
+const NOTIFICATION_HISTORY_MONTHS = 6;
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -19,31 +24,57 @@ class LambdaHandler {
       return APIResponse.error(401, 'Invalid token');
     }
 
-    const items = await this.listNotifications(tableName, userId);
+    const createdAfter = getNotificationHistoryBoundary();
+    const limit = getLimit(event.queryStringParameters?.limit);
+    const cursor = event.queryStringParameters?.cursor;
+    const exclusiveStartKey = cursor ? decodePaginationCursor(cursor) : undefined;
+    if (cursor && !exclusiveStartKey) {
+      return APIResponse.error(400, 'Invalid notifications cursor');
+    }
+
+    const { items, nextCursor } = await this.listNotifications(tableName, userId, createdAfter, {
+      limit,
+      exclusiveStartKey,
+    });
+    const unreadCount = await this.countUnreadNotifications(tableName, userId, createdAfter);
 
     return APIResponse.success(200, {
       count: items.length,
+      unreadCount,
       items,
+      nextCursor,
     });
   }
 
-  private async listNotifications(tableName: string, userId: string): Promise<RequestNotification[]> {
+  private async listNotifications(
+    tableName: string,
+    userId: string,
+    createdAfter: string,
+    page: {
+      limit: number;
+      exclusiveStartKey?: Record<string, AttributeValue>;
+    },
+  ): Promise<{ items: RequestNotification[]; nextCursor?: string }> {
     const items: RequestNotification[] = [];
-    let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
+    let lastEvaluatedKey = page.exclusiveStartKey;
 
     do {
+      const remainingItems = page.limit - items.length;
       const response = await this.ddbClient.send(
         new QueryCommand({
           TableName: tableName,
           ScanIndexForward: false,
-          KeyConditionExpression: '#userId = :userId',
+          KeyConditionExpression: '#userId = :userId AND #createdAt >= :createdAfter',
           ExpressionAttributeNames: {
             '#userId': 'UserId',
+            '#createdAt': 'CreatedAt',
           },
           ExpressionAttributeValues: {
             ':userId': { S: userId },
+            ':createdAfter': { S: createdAfter },
           },
           ExclusiveStartKey: lastEvaluatedKey,
+          Limit: remainingItems,
         }),
       );
 
@@ -52,9 +83,43 @@ class LambdaHandler {
       }
 
       lastEvaluatedKey = response.LastEvaluatedKey;
+    } while (lastEvaluatedKey && items.length < page.limit);
+
+    return {
+      items,
+      nextCursor: lastEvaluatedKey ? encodePaginationCursor(lastEvaluatedKey) : undefined,
+    };
+  }
+
+  private async countUnreadNotifications(tableName: string, userId: string, createdAfter: string): Promise<number> {
+    let count = 0;
+    let lastEvaluatedKey: Record<string, AttributeValue> | undefined;
+
+    do {
+      const response = await this.ddbClient.send(
+        new QueryCommand({
+          TableName: tableName,
+          Select: 'COUNT',
+          KeyConditionExpression: '#userId = :userId AND #createdAt >= :createdAfter',
+          FilterExpression: 'attribute_not_exists(#readAt)',
+          ExpressionAttributeNames: {
+            '#userId': 'UserId',
+            '#createdAt': 'CreatedAt',
+            '#readAt': 'ReadAt',
+          },
+          ExpressionAttributeValues: {
+            ':userId': { S: userId },
+            ':createdAfter': { S: createdAfter },
+          },
+          ExclusiveStartKey: lastEvaluatedKey,
+        }),
+      );
+
+      count += response.Count ?? 0;
+      lastEvaluatedKey = response.LastEvaluatedKey;
     } while (lastEvaluatedKey);
 
-    return items;
+    return count;
   }
 }
 
@@ -82,8 +147,24 @@ function toRequestNotification(item: RequestNotificationEntity): RequestNotifica
     comment: item.Comment || undefined,
     decidedAt: item.CreatedAt,
     actorUsername: item.ActorUsername,
-    read: item.Read,
+    readAt: item.ReadAt,
   };
+}
+
+function getLimit(value?: string): number {
+  if (!value) return DEFAULT_PAGE_LIMIT;
+
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1) return DEFAULT_PAGE_LIMIT;
+
+  return Math.min(limit, MAX_PAGE_LIMIT);
+}
+
+function getNotificationHistoryBoundary(): string {
+  const boundary = new Date();
+  boundary.setUTCMonth(boundary.getUTCMonth() - NOTIFICATION_HISTORY_MONTHS);
+
+  return boundary.toISOString();
 }
 
 const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
