@@ -14,9 +14,9 @@ const auditEvent: IssueTrackingAuditEvent = {
   issueKey: 'FEYES-5',
   userId: 'user-1',
   requestId: 'REQUEST#1',
-  tableName: 'Customers',
-  targetPK: 'CUSTOMER#1',
-  targetSK: 'N/A',
+  table: 'Customers',
+  targetPk: 'CUSTOMER#1',
+  targetSk: 'N/A',
   accountId: '123456789012',
   region: 'eu-central-1',
   dateTime: '2026-05-01T12:00:00.000Z',
@@ -62,7 +62,7 @@ describe('issue tracking audit worker helpers', () => {
       ]),
     });
     expect(serialized).toContain(
-      'Record access audit | User: user-1 | Request: REQUEST#1 | Table: Customers | Target PK: CUSTOMER#1 | Target SK: N/A | Account: 123456789012 | Region: eu-central-1 | Occurred at: 2026-05-01T12:00:00.000Z | Stage: dev',
+      'Record access audit | User: user-1 | Request: REQUEST#1 | Table: Customers | Target pk: CUSTOMER#1 | Target sk: N/A | Account: 123456789012 | Region: eu-central-1 | Occurred at: 2026-05-01T12:00:00.000Z | Stage: dev',
     );
     expect(serialized).not.toContain('item');
   });

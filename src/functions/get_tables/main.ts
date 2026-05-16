@@ -26,7 +26,7 @@ class LambdaHandler {
   }
 
   async listAllTables(ddbClient: DynamoDBClient) {
-    const results: Array<{ name: string; pK: string; sK?: string }> = [];
+    const results: Array<{ name: string; pk: string; sk?: string }> = [];
     let ExclusiveStartTableName: string | undefined = undefined;
 
     do {
@@ -39,11 +39,11 @@ class LambdaHandler {
         try {
           const desc = await ddbClient.send(new DescribeTableCommand({ TableName: name }));
           const keySchema = desc.Table?.KeySchema || [];
-          const pK = keySchema.find((k) => k.KeyType === 'HASH')?.AttributeName || '';
-          const sK = keySchema.find((k) => k.KeyType === 'RANGE')?.AttributeName;
-          results.push(sK ? { name, pK, sK } : { name, pK });
+          const pk = keySchema.find((k) => k.KeyType === 'HASH')?.AttributeName || '';
+          const sk = keySchema.find((k) => k.KeyType === 'RANGE')?.AttributeName;
+          results.push(sk ? { name, pk, sk } : { name, pk });
         } catch (err) {
-          results.push({ name, pK: '' });
+          results.push({ name, pk: '' });
         }
       }
 

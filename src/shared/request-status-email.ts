@@ -6,8 +6,8 @@ export type RequestStatusEmailMessage = {
   id: string;
   accountId: string;
   region: string;
-  targetPK: string;
-  targetSK?: string;
+  targetPk: string;
+  targetSk?: string;
   reason: string;
 };
 
@@ -28,8 +28,8 @@ export class SesRequestStatusEmailNotifier implements RequestStatusEmailNotifier
       ['Request ID', message.id],
       ['Account', message.accountId],
       ['Region', message.region],
-      ['Target PK', message.targetPK],
-      ['Target SK', message.targetSK ?? ''],
+      ['Target pk', message.targetPk],
+      ['Target sk', message.targetSk ?? ''],
       ['Reason', message.reason],
     ];
     const bodyLines = [
@@ -39,8 +39,8 @@ export class SesRequestStatusEmailNotifier implements RequestStatusEmailNotifier
       `Request ID: ${message.id}`,
       `Account: ${message.accountId}`,
       `Region: ${message.region}`,
-      `Target PK: ${message.targetPK}`,
-      `Target SK: ${message.targetSK ?? ''}`,
+      `Target pk: ${message.targetPk}`,
+      `Target sk: ${message.targetSk ?? ''}`,
       `Reason: ${message.reason}`,
     ];
     const htmlRows = rows

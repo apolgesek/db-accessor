@@ -67,11 +67,11 @@ class LambdaHandler {
     const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName as string;
 
     const key: Record<string, string> = {
-      [PK_NAME]: result.value.targetPK,
+      [PK_NAME]: result.value.targetPk,
     };
 
     if (SK_NAME) {
-      key[SK_NAME] = result.value.targetSK;
+      key[SK_NAME] = result.value.targetSk;
     }
 
     if (result.value.pkOperator !== 'BEGINS_WITH') {
@@ -92,19 +92,19 @@ class LambdaHandler {
           TableName: result.value.table,
           ExpressionAttributeNames: { '#pk': PK_NAME },
           ExpressionAttributeValues: {
-            ':pk': result.value.targetPK,
+            ':pk': result.value.targetPk,
           },
           ConsistentRead: false,
         };
 
         if (
           SK_NAME &&
-          result.value.targetSK != null &&
+          result.value.targetSk != null &&
           params.ExpressionAttributeNames &&
           params.ExpressionAttributeValues
         ) {
           params.ExpressionAttributeNames['#sk'] = SK_NAME;
-          params.ExpressionAttributeValues[':sk'] = result.value.targetSK;
+          params.ExpressionAttributeValues[':sk'] = result.value.targetSk;
           params.KeyConditionExpression =
             result.value.skOperator === 'BEGINS_WITH'
               ? '#pk = :pk AND begins_with(#sk, :sk)'
@@ -121,40 +121,40 @@ class LambdaHandler {
       }
     }
 
-    const { region, accountId, table, targetPK, targetSK, ruleset, pkOperator, skOperator, version } = result.value;
+    const { region, accountId, table, targetPk, targetSk, ruleset, pkOperator, skOperator, version } = result.value;
 
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
     const dateNow = Date.now();
     const createdAt = new Date(dateNow).toISOString();
     const timeBucket = getTimeBucket(dateNow);
-    const scopeKey = getRulesetScopeKey(targetPK, targetSK, pkOperator, skOperator);
+    const scopeKey = getRulesetScopeKey(targetPk, targetSk, pkOperator, skOperator);
     const isNewScope = version == null;
     const nextVersion = (version ?? 0) + 1;
 
     const historyItem: Record<string, unknown> = {
-      PK: getRulesetHistoryPk(accountId, timeBucket),
-      SK: getRulesetHistorySk(dateNow, region, table, scopeKey),
+      pk: getRulesetHistoryPk(accountId, timeBucket),
+      sk: getRulesetHistorySk(dateNow, region, table, scopeKey),
       entityType: 'RULESET_HISTORY',
       createdAt,
       createdAtTimestamp: dateNow,
       accountId,
       region,
       table,
-      targetPK,
+      targetPk,
       ruleset,
       scopeKey,
-      GSI_ACCOUNT_REGION_PK: getRulesetAccountRegionPk(accountId, region, timeBucket),
-      GSI_ACCOUNT_REGION_SK: getRulesetAccountRegionSk(dateNow, table, scopeKey),
-      GSI_ACCOUNT_REGION_TABLE_PK: getRulesetAccountRegionTablePk(accountId, region, table, timeBucket),
-      GSI_ACCOUNT_REGION_TABLE_SK: getRulesetAccountRegionTableSk(dateNow, scopeKey),
+      gsiAccountRegionPk: getRulesetAccountRegionPk(accountId, region, timeBucket),
+      gsiAccountRegionSk: getRulesetAccountRegionSk(dateNow, table, scopeKey),
+      gsiAccountRegionTablePk: getRulesetAccountRegionTablePk(accountId, region, table, timeBucket),
+      gsiAccountRegionTableSk: getRulesetAccountRegionTableSk(dateNow, scopeKey),
     };
 
     if (pkOperator) {
       historyItem['pkOperator'] = pkOperator;
     }
 
-    if (targetSK) {
-      historyItem['targetSK'] = targetSK;
+    if (targetSk) {
+      historyItem['targetSk'] = targetSk;
       historyItem['skOperator'] = skOperator;
     }
 
@@ -164,8 +164,8 @@ class LambdaHandler {
       new UpdateCommand({
         TableName: process.env.RULESET_TABLE_NAME,
         Key: {
-          PK: getRulesetSnapshotPk(accountId, region, table),
-          SK: ACTIVE_RULESET_SK,
+          pk: getRulesetSnapshotPk(accountId, region, table),
+          sk: ACTIVE_RULESET_SK,
         },
         UpdateExpression: `SET
           #entityType = if_not_exists(#entityType, :entityType),
@@ -204,9 +204,9 @@ class LambdaHandler {
     const updateExpressionAttributeValues: Record<string, unknown> = {
       ':updatedAt': createdAt,
       ':scope': {
-        targetPK,
+        targetPk,
         ...(pkOperator ? { pkOperator } : {}),
-        ...(targetSK ? { targetSK, skOperator } : {}),
+        ...(targetSk ? { targetSk, skOperator } : {}),
         ruleset,
         updatedAt: createdAt,
         version: nextVersion,
@@ -222,15 +222,15 @@ class LambdaHandler {
               Put: {
                 TableName: process.env.RULESET_TABLE_NAME,
                 Item: historyItem,
-                ConditionExpression: 'attribute_not_exists(PK)',
+                ConditionExpression: 'attribute_not_exists(pk)',
               },
             },
             {
               Update: {
                 TableName: process.env.RULESET_TABLE_NAME,
                 Key: {
-                  PK: getRulesetSnapshotPk(accountId, region, table),
-                  SK: ACTIVE_RULESET_SK,
+                  pk: getRulesetSnapshotPk(accountId, region, table),
+                  sk: ACTIVE_RULESET_SK,
                 },
                 UpdateExpression: `SET #updatedAt = :updatedAt, #activeRulesets.#scopeKey = :scope`,
                 ConditionExpression: scopeConditionExpression,

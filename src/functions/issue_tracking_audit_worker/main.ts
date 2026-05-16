@@ -188,9 +188,9 @@ export function buildCommentDocument(event: IssueTrackingAuditEvent): AtlassianD
     `Record access audit`,
     `User: ${event.userId}`,
     `Request: ${event.requestId}`,
-    `Table: ${event.tableName}`,
-    `Target PK: ${event.targetPK}`,
-    `Target SK: ${event.targetSK ?? 'N/A'}`,
+    `Table: ${event.table}`,
+    `Target pk: ${event.targetPk}`,
+    `Target sk: ${event.targetSk ?? 'N/A'}`,
     `Account: ${event.accountId}`,
     `Region: ${event.region}`,
     `Occurred at: ${occurredAt}`,
@@ -244,8 +244,8 @@ function parseIssueTrackingAuditEvent(body: string): IssueTrackingAuditEvent {
     !event.issueKey ||
     !event.userId ||
     !event.requestId ||
-    !event.tableName ||
-    !event.targetPK ||
+    !event.table ||
+    !event.targetPk ||
     !event.accountId ||
     !event.region ||
     !event.dateTime

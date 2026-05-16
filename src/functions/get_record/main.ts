@@ -62,8 +62,8 @@ class LambdaHandler {
       new GetItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
-          PK: { S: `USER#${username}` },
-          SK: { S: base64urlDecode(pathParams.id as string) },
+          pk: { S: `USER#${username}` },
+          sk: { S: base64urlDecode(pathParams.id as string) },
         },
       }),
     );
@@ -102,11 +102,11 @@ class LambdaHandler {
       new PutItemCommand({
         TableName: process.env.AUDIT_LOGS_TABLE_NAME,
         Item: {
-          UserId: { S: item.userId },
-          CreatedAt: { N: createdAt },
-          TableName: { S: item.table },
-          TargetPK: { S: item.targetPK },
-          TargetSK: { S: item.targetSK || 'N/A' },
+          userId: { S: item.userId },
+          createdAt: { N: createdAt },
+          table: { S: item.table },
+          targetPk: { S: item.targetPk },
+          targetSk: { S: item.targetSk || 'N/A' },
         },
       }),
     );
@@ -116,7 +116,7 @@ class LambdaHandler {
   }
 
   private async publishIssueTrackingAuditEvent(item: EntityRequest, createdAt: string): Promise<void> {
-    const requestId = item.SK.split('#').at(-1) ?? '';
+    const requestId = item.sk.split('#').at(-1) ?? '';
     const issueKey = item.issueKey;
 
     try {
@@ -126,9 +126,9 @@ class LambdaHandler {
         issueKey,
         userId: item.userId,
         requestId,
-        tableName: item.table,
-        targetPK: item.targetPK,
-        targetSK: item.targetSK || 'N/A',
+        table: item.table,
+        targetPk: item.targetPk,
+        targetSk: item.targetSk || 'N/A',
         accountId: item.accountId,
         region: item.region,
         stage: process.env.STAGE,
@@ -150,8 +150,8 @@ class RecordAccessor {
   async getRecord(
     request: EntityRequest & { pkName: string; skName?: string },
   ): Promise<{ item: Record<string, unknown>; maskRuleset: string[] | null } | null> {
-    const pk = request.targetPK;
-    const sk = request.targetSK;
+    const pk = request.targetPk;
+    const sk = request.targetSk;
     const PK_NAME = request.pkName;
     const SK_NAME = request.skName;
     const TABLE_NAME = request.table;
@@ -195,8 +195,8 @@ class RecordAccessor {
       new GetCommand({
         TableName: process.env.RULESET_TABLE_NAME,
         Key: {
-          PK: getRulesetSnapshotPk(request.accountId, request.region, request.table),
-          SK: ACTIVE_RULESET_SK,
+          pk: getRulesetSnapshotPk(request.accountId, request.region, request.table),
+          sk: ACTIVE_RULESET_SK,
         },
         ConsistentRead: false,
       }),

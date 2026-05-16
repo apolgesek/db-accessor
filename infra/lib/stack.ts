@@ -1,4 +1,4 @@
-﻿import { parse } from '@aws-sdk/util-arn-parser';
+import { parse } from '@aws-sdk/util-arn-parser';
 import * as cdk from 'aws-cdk-lib';
 import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
@@ -38,47 +38,52 @@ export class DbAccessorStack extends cdk.Stack {
 
     const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
-      partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'CreatedAt', type: dynamodb.AttributeType.NUMBER },
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
     const grantTable = new dynamodb.Table(this, `${projectName}-grants`, {
       tableName: `${projectName}-grants`,
-      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
     const rulesetTable = new dynamodb.Table(this, `${projectName}-rulesets`, {
       tableName: `${projectName}-rulesets`,
-      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
     });
 
     const notificationTable = new dynamodb.Table(this, `${projectName}-notifications`, {
       tableName: `${projectName}-notifications`,
-      partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'CreatedAt', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'decidedAt', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    notificationTable.addGlobalSecondaryIndex({
+      indexName: 'gsiUserNotification',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'id', type: dynamodb.AttributeType.STRING },
     });
 
     const websocketConnectionTable = new dynamodb.Table(this, `${projectName}-websocket-connections`, {
       tableName: `${projectName}-websocket-connections`,
-      partitionKey: { name: 'ConnectionId', type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      timeToLiveAttribute: 'Ttl',
+      timeToLiveAttribute: 'ttl',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     websocketConnectionTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_USER_ID',
-      partitionKey: { name: 'UserId', type: dynamodb.AttributeType.STRING },
+      indexName: 'gsiUserId',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
     });
 
     const issueTrackingAuditDlq = new sqs.Queue(this, `${projectName}-issue-tracking-audit-dlq`, {
@@ -148,27 +153,27 @@ export class DbAccessorStack extends cdk.Stack {
     );
 
     rulesetTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_ACCOUNT_REGION',
-      partitionKey: { name: 'GSI_ACCOUNT_REGION_PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'GSI_ACCOUNT_REGION_SK', type: dynamodb.AttributeType.STRING },
+      indexName: 'gsiAccountRegion',
+      partitionKey: { name: 'gsiAccountRegionPk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsiAccountRegionSk', type: dynamodb.AttributeType.STRING },
     });
 
     rulesetTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_ACCOUNT_REGION_TABLE',
-      partitionKey: { name: 'GSI_ACCOUNT_REGION_TABLE_PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'GSI_ACCOUNT_REGION_TABLE_SK', type: dynamodb.AttributeType.STRING },
+      indexName: 'gsiAccountRegionTable',
+      partitionKey: { name: 'gsiAccountRegionTablePk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsiAccountRegionTableSk', type: dynamodb.AttributeType.STRING },
     });
 
     grantTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_ALL',
-      partitionKey: { name: 'GSI_ALL_PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'GSI_ALL_SK', type: dynamodb.AttributeType.STRING },
+      indexName: 'gsiAll',
+      partitionKey: { name: 'gsiAllPk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsiAllSk', type: dynamodb.AttributeType.STRING },
     });
 
     grantTable.addGlobalSecondaryIndex({
-      indexName: 'GSI_PENDING',
-      partitionKey: { name: 'GSI_PENDING_PK', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'GSI_PENDING_SK', type: dynamodb.AttributeType.STRING },
+      indexName: 'gsiPending',
+      partitionKey: { name: 'gsiPendingPk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'gsiPendingSk', type: dynamodb.AttributeType.STRING },
     });
 
     const sharedVars = {
@@ -314,8 +319,8 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const managementAccountId = '058264309711';
-    const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];
+    const managementaccountId = '058264309711';
+    const assumeRoleArns = [`arn:aws:iam::${managementaccountId}:role/DbAccessorAppRole`];
 
     getRecordFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -326,7 +331,7 @@ export class DbAccessorStack extends cdk.Stack {
     );
 
     const getAccountsFn = createLambda(this, projectName, 'get-accounts', {
-      AWS_MANAGEMENT_ACCOUNT: managementAccountId,
+      AWS_MANAGEMENT_ACCOUNT: managementaccountId,
       AWS_ACCOUNTS: assumeRoleArns.map((arn) => parse(arn).accountId).join(','),
       ...sharedVars,
     });
@@ -370,6 +375,11 @@ export class DbAccessorStack extends cdk.Stack {
       ...sharedVars,
     });
     notificationTable.grantReadData(getNotificationsFn);
+    const markNotificationsReadFn = createLambda(this, projectName, 'mark-notifications-read', {
+      NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
+      ...sharedVars,
+    });
+    notificationTable.grantReadWriteData(markNotificationsReadFn);
     const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
     grantTable.grantReadData(adminGetRequestFn);
     const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
@@ -473,7 +483,12 @@ export class DbAccessorStack extends cdk.Stack {
     const notifications = api.root.addResource('notifications');
     notifications.addCorsPreflight({
       allowOrigins: apigw.Cors.ALL_ORIGINS,
-      allowMethods: ['OPTIONS', 'GET'],
+      allowMethods: ['OPTIONS', 'GET', 'POST'],
+    });
+    const readNotifications = notifications.addResource('read');
+    readNotifications.addCorsPreflight({
+      allowOrigins: apigw.Cors.ALL_ORIGINS,
+      allowMethods: ['OPTIONS', 'POST'],
     });
 
     const adminCreateRuleset = adminResource.addResource('create-ruleset');
@@ -544,6 +559,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
     notifications.addMethod('GET', new apigw.LambdaIntegration(getNotificationsFn), {
+      authorizationType: apigw.AuthorizationType.COGNITO,
+      authorizer: cognitoAuthorizer,
+      authorizationScopes: ['openid'],
+    });
+    readNotifications.addMethod('POST', new apigw.LambdaIntegration(markNotificationsReadFn), {
       authorizationType: apigw.AuthorizationType.COGNITO,
       authorizer: cognitoAuthorizer,
       authorizationScopes: ['openid'],

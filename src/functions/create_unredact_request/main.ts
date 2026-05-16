@@ -25,8 +25,8 @@ class LambdaHandler {
       new GetItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
-          PK: { S: `USER#${username}` },
-          SK: { S: decodedRequestId },
+          pk: { S: `USER#${username}` },
+          sk: { S: decodedRequestId },
         },
       }),
     );
@@ -52,8 +52,8 @@ class LambdaHandler {
       new UpdateItemCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         Key: {
-          PK: { S: `USER#${username}` },
-          SK: { S: decodedRequestId },
+          pk: { S: `USER#${username}` },
+          sk: { S: decodedRequestId },
         },
         UpdateExpression: 'SET #unredactRequests = :unredactRequests',
         ExpressionAttributeNames: {

@@ -4,9 +4,9 @@ export type IssueTrackingAuditEvent = {
   issueKey: string;
   userId: string;
   requestId: string;
-  tableName: string;
-  targetPK: string;
-  targetSK: string;
+  table: string;
+  targetPk: string;
+  targetSk: string;
   accountId: string;
   region: string;
   dateTime: string;

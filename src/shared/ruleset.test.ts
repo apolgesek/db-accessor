@@ -52,71 +52,71 @@ describe('ruleset helpers', () => {
       resolveActiveMaskRuleset(
         {
           exact: {
-            targetPK: 'USER#1',
-            targetSK: 'PROFILE#1',
+            targetPk: 'USER#1',
+            targetSk: 'PROFILE#1',
             skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }],
           },
           prefix: {
-            targetPK: 'USER#1',
-            targetSK: 'ORDER#',
+            targetPk: 'USER#1',
+            targetSk: 'ORDER#',
             skOperator: 'BEGINS_WITH',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'payments[].cardNumber' }],
           },
         },
-        { targetPK: 'USER#1', targetSK: 'ORDER#100' },
+        { targetPk: 'USER#1', targetSk: 'ORDER#100' },
       ),
     ).toEqual(['payments[].cardNumber']);
   });
 
-  it('matches BEGINS_WITH on PK only', () => {
+  it('matches BEGINS_WITH on pk only', () => {
     expect(
       resolveActiveMaskRuleset(
         {
           pkPrefix: {
-            targetPK: 'USER#',
+            targetPk: 'USER#',
             pkOperator: 'BEGINS_WITH',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'ssn' }],
           },
         },
-        { targetPK: 'USER#42' },
+        { targetPk: 'USER#42' },
       ),
     ).toEqual(['ssn']);
   });
 
-  it('matches BEGINS_WITH on both PK and SK', () => {
+  it('matches BEGINS_WITH on both pk and sk', () => {
     expect(
       resolveActiveMaskRuleset(
         {
           both: {
-            targetPK: 'USER#',
-            targetSK: 'ORDER#',
+            targetPk: 'USER#',
+            targetSk: 'ORDER#',
             pkOperator: 'BEGINS_WITH',
             skOperator: 'BEGINS_WITH',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'payments[].cardNumber' }],
           },
         },
-        { targetPK: 'USER#99', targetSK: 'ORDER#5' },
+        { targetPk: 'USER#99', targetSk: 'ORDER#5' },
       ),
     ).toEqual(['payments[].cardNumber']);
   });
 
-  it('does not match when PK prefix does not fit', () => {
+  it('does not match when pk prefix does not fit', () => {
     expect(
       resolveActiveMaskRuleset(
         {
           pkPrefix: {
-            targetPK: 'USER#',
+            targetPk: 'USER#',
             pkOperator: 'BEGINS_WITH',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'ssn' }],
           },
         },
-        { targetPK: 'ORG#42' },
+        { targetPk: 'ORG#42' },
       ),
     ).toBeNull();
   });
@@ -126,19 +126,19 @@ describe('ruleset helpers', () => {
       resolveActiveMaskRuleset(
         {
           allPk: {
-            targetPK: 'USER#1',
+            targetPk: 'USER#1',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }, { path: 'name' }],
           },
           exact: {
-            targetPK: 'USER#1',
-            targetSK: 'PROFILE#1',
+            targetPk: 'USER#1',
+            targetSk: 'PROFILE#1',
             skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }, { path: 'phone' }],
           },
         },
-        { targetPK: 'USER#1', targetSK: 'PROFILE#1' },
+        { targetPk: 'USER#1', targetSk: 'PROFILE#1' },
       ),
     ).toEqual(['email', 'name', 'phone']);
   });
@@ -148,14 +148,14 @@ describe('ruleset helpers', () => {
       resolveActiveMaskRuleset(
         {
           exact: {
-            targetPK: 'USER#2',
-            targetSK: 'PROFILE#1',
+            targetPk: 'USER#2',
+            targetSk: 'PROFILE#1',
             skOperator: 'EQUALS',
             updatedAt: '2026-04-23T00:00:00.000Z',
             ruleset: [{ path: 'email' }],
           },
         },
-        { targetPK: 'USER#1', targetSK: 'PROFILE#1' },
+        { targetPk: 'USER#1', targetSk: 'PROFILE#1' },
       ),
     ).toBeNull();
   });

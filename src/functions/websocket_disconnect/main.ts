@@ -15,7 +15,7 @@ class LambdaHandler {
       new DeleteItemCommand({
         TableName: process.env.WEBSOCKET_CONNECTIONS_TABLE_NAME,
         Key: {
-          ConnectionId: { S: connectionId },
+          connectionId: { S: connectionId },
         },
       }),
     );

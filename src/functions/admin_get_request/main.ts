@@ -50,10 +50,10 @@ class LambdaHandler {
         const cmd = new QueryCommand({
           TableName: process.env.GRANTS_TABLE_NAME,
           ScanIndexForward: false,
-          IndexName: 'GSI_ALL',
+          IndexName: 'gsiAll',
           KeyConditionExpression: '#pk = :pk',
           ExpressionAttributeNames: {
-            '#pk': 'GSI_ALL_PK',
+            '#pk': 'gsiAllPk',
           },
           ExpressionAttributeValues: {
             ':pk': { S: `REQBUCKET#${timeRange}` },
@@ -84,10 +84,10 @@ class LambdaHandler {
       const cmd = new QueryCommand({
         TableName: process.env.GRANTS_TABLE_NAME,
         ScanIndexForward: false,
-        IndexName: 'GSI_PENDING',
+        IndexName: 'gsiPending',
         KeyConditionExpression: '#pk = :pk',
         ExpressionAttributeNames: {
-          '#pk': 'GSI_PENDING_PK',
+          '#pk': 'gsiPendingPk',
         },
         ExpressionAttributeValues: {
           ':pk': { S: 'PENDING' },

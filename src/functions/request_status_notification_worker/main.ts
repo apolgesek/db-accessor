@@ -28,22 +28,22 @@ class DynamoDbNotificationStore {
       new PutItemCommand({
         TableName: this.notificationsTableName,
         Item: {
-          UserId: { S: notification.userId },
-          CreatedAt: { S: notification.decidedAt },
-          NotificationId: { S: notification.id },
-          Type: { S: 'REQUEST_STATUS_CHANGED' },
-          Status: { S: notification.status },
-          RequestId: { S: notification.requestId },
-          RequestPK: { S: notification.requestPK },
-          RequestSK: { S: notification.requestSK },
-          AccountId: { S: notification.accountId },
-          Region: { S: notification.region },
-          TableName: { S: notification.table },
-          TargetPK: { S: notification.targetPK },
-          TargetSK: { S: notification.targetSK ?? '' },
-          Reason: { S: notification.reason },
-          Comment: { S: notification.comment ?? '' },
-          ActorUsername: { S: notification.actorUsername },
+          id: { S: notification.id },
+          userId: { S: notification.userId },
+          type: { S: 'REQUEST_STATUS_CHANGED' },
+          status: { S: notification.status },
+          requestId: { S: notification.requestId },
+          requestPk: { S: notification.requestPk },
+          requestSk: { S: notification.requestSk },
+          accountId: { S: notification.accountId },
+          region: { S: notification.region },
+          table: { S: notification.table },
+          targetPk: { S: notification.targetPk },
+          targetSk: { S: notification.targetSk ?? '' },
+          reason: { S: notification.reason },
+          comment: { S: notification.comment ?? '' },
+          decidedAt: { S: notification.decidedAt },
+          actorUsername: { S: notification.actorUsername },
         },
       }),
     );
@@ -55,10 +55,10 @@ class DynamoDbNotificationStore {
     const response = await this.ddbClient.send(
       new QueryCommand({
         TableName: this.connectionsTableName,
-        IndexName: 'GSI_USER_ID',
+        IndexName: 'gsiUserId',
         KeyConditionExpression: '#userId = :userId',
         ExpressionAttributeNames: {
-          '#userId': 'UserId',
+          '#userId': 'userId',
         },
         ExpressionAttributeValues: {
           ':userId': { S: userId },
@@ -76,7 +76,7 @@ class DynamoDbNotificationStore {
       new DeleteItemCommand({
         TableName: this.connectionsTableName,
         Key: {
-          ConnectionId: { S: connectionId },
+          connectionId: { S: connectionId },
         },
       }),
     );
@@ -127,19 +127,20 @@ class LambdaHandler {
 
   private async processRecord(record: SQSRecord): Promise<void> {
     const event = parseRequestStatusEvent(record.body);
-    const requestId = getRequestIdFromSk(event.request.SK);
+    const requestId = getRequestIdFromSk(event.request.sk);
     const notification: RequestNotification = {
+      type: 'REQUEST_STATUS_CHANGED',
       id: `${event.decidedAt}#${requestId}`,
       userId: event.request.userId,
       status: event.status,
       requestId,
-      requestPK: event.request.PK,
-      requestSK: event.request.SK,
+      requestPk: event.request.pk,
+      requestSk: event.request.sk,
       accountId: event.request.accountId,
       region: event.request.region,
       table: event.request.table,
-      targetPK: event.request.targetPK,
-      targetSK: event.request.targetSK,
+      targetPk: event.request.targetPk,
+      targetSk: event.request.targetSk,
       reason: event.request.reason,
       comment: event.request.comment,
       decidedAt: event.decidedAt,
@@ -182,7 +183,7 @@ function parseRequestStatusEvent(body: string): RequestStatusEvent {
 
 function readConnectionIds(response: QueryCommandOutput): string[] {
   return (
-    response.Items?.map((item) => item.ConnectionId?.S).filter((connectionId): connectionId is string =>
+    response.Items?.map((item) => item.connectionId?.S).filter((connectionId): connectionId is string =>
       Boolean(connectionId),
     ) ?? []
   );

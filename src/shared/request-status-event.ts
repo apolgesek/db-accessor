@@ -14,13 +14,13 @@ export type RequestStatusEvent = {
   };
   request: Pick<
     EntityRequest,
-    'PK' | 'SK' | 'accountId' | 'region' | 'table' | 'targetPK' | 'targetSK' | 'reason' | 'userId' | 'issueKey'
+    'pk' | 'sk' | 'accountId' | 'region' | 'table' | 'targetPk' | 'targetSk' | 'reason' | 'userId' | 'issueKey'
   > & {
     comment?: string | null;
   };
   stage?: string;
 };
 
-export function getRequestIdFromSk(SK: string): string {
-  return SK.split('#').at(-1) ?? SK;
+export function getRequestIdFromSk(sk: string): string {
+  return sk.split('#').at(-1) ?? sk;
 }

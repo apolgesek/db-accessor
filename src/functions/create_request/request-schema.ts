@@ -3,8 +3,8 @@ import Joi from 'joi';
 export const requestSchema = Joi.object({
   duration: Joi.number().integer().min(1).max(24).required(),
   table: Joi.string().required(),
-  targetPK: Joi.string().required(),
-  targetSK: Joi.string(),
+  targetPk: Joi.string().required(),
+  targetSk: Joi.string(),
   reason: Joi.string().max(1024).required(),
   issueKey: Joi.string()
     .trim()

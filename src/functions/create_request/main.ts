@@ -43,11 +43,11 @@ class LambdaHandler {
     const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName as string;
 
     const key: Record<string, AttributeValue> = {
-      [PK_NAME]: { S: result.value.targetPK },
+      [PK_NAME]: { S: result.value.targetPk },
     };
 
     if (SK_NAME) {
-      key[SK_NAME] = { S: result.value.targetSK };
+      key[SK_NAME] = { S: result.value.targetSk };
     }
 
     const resp = await targetDbClient.send(
@@ -69,8 +69,8 @@ class LambdaHandler {
     const username = toAppUsername(claims.username);
     const requestId = crypto.randomUUID();
     const item: Partial<Record<keyof EntityRequest, AttributeValue>> = {
-      PK: { S: `USER#${username}` },
-      SK: { S: `REQUEST#${dateNow}#${requestId}` },
+      pk: { S: `USER#${username}` },
+      sk: { S: `REQUEST#${dateNow}#${requestId}` },
       userId: { S: username },
       status: { S: 'PENDING' },
       createdAt: { S: new Date(dateNow).toISOString() },
@@ -78,18 +78,18 @@ class LambdaHandler {
       table: { S: result.value.table },
       region: { S: result.value.region },
       duration: { N: result.value.duration.toString() },
-      targetPK: { S: result.value.targetPK },
+      targetPk: { S: result.value.targetPk },
       approvedBy: { L: [] },
       reason: { S: result.value.reason },
       issueKey: { S: result.value.issueKey },
-      GSI_ALL_PK: { S: `REQBUCKET#${yearMonth}` },
-      GSI_ALL_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
-      GSI_PENDING_PK: { S: 'PENDING' },
-      GSI_PENDING_SK: { S: `${dateNow}#USER#${username}#${requestId}` },
+      gsiAllPk: { S: `REQBUCKET#${yearMonth}` },
+      gsiAllSk: { S: `${dateNow}#USER#${username}#${requestId}` },
+      gsiPendingPk: { S: 'PENDING' },
+      gsiPendingSk: { S: `${dateNow}#USER#${username}#${requestId}` },
     };
 
     if (SK_NAME) {
-      item.targetSK = { S: result.value.targetSK };
+      item.targetSk = { S: result.value.targetSk };
     }
 
     const createNewRequestCommand = new PutItemCommand({

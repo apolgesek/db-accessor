@@ -1,38 +1,19 @@
 export type RequestNotification = {
+  type: 'REQUEST_STATUS_CHANGED';
   id: string;
   userId: string;
   status: 'APPROVED' | 'REJECTED';
   requestId: string;
-  requestPK: string;
-  requestSK: string;
+  requestPk: string;
+  requestSk: string;
   accountId: string;
   region: string;
   table: string;
-  targetPK: string;
-  targetSK?: string;
+  targetPk: string;
+  targetSk?: string;
   reason: string;
   comment?: string | null;
   decidedAt: string;
   actorUsername: string;
   readAt?: string;
-};
-
-export type RequestNotificationEntity = {
-  UserId: string;
-  CreatedAt: string;
-  NotificationId: string;
-  Type: 'REQUEST_STATUS_CHANGED';
-  Status: RequestNotification['status'];
-  RequestId: string;
-  RequestPK: string;
-  RequestSK: string;
-  AccountId: string;
-  Region: string;
-  TableName: string;
-  TargetPK: string;
-  TargetSK?: string;
-  Reason: string;
-  Comment?: string;
-  ActorUsername: string;
-  ReadAt?: string;
 };

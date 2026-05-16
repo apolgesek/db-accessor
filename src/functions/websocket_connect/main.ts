@@ -7,7 +7,7 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const connectionId = event.requestContext.connectionId;
-    const userId = getUserId(event);
+    const userId = getuserId(event);
 
     if (!connectionId) {
       return { statusCode: 400, body: 'Missing connectionId' };
@@ -21,10 +21,10 @@ class LambdaHandler {
       new PutItemCommand({
         TableName: process.env.WEBSOCKET_CONNECTIONS_TABLE_NAME,
         Item: {
-          ConnectionId: { S: connectionId },
-          UserId: { S: userId },
+          connectionId: { S: connectionId },
+          userId: { S: userId },
           ConnectedAt: { S: new Date().toISOString() },
-          Ttl: { N: Math.floor(Date.now() / 1000 + 86_400).toString() },
+          ttl: { N: Math.floor(Date.now() / 1000 + 86_400).toString() },
         },
       }),
     );
@@ -33,13 +33,13 @@ class LambdaHandler {
   }
 }
 
-function getUserId(event: APIGatewayProxyEvent): string {
+function getuserId(event: APIGatewayProxyEvent): string {
   const authorizer = event.requestContext.authorizer as
     | { principalId?: string; username?: string; claims?: { username?: string } }
     | undefined;
-  const rawUserId = authorizer?.claims?.username ?? authorizer?.username ?? authorizer?.principalId;
+  const rawuserId = authorizer?.claims?.username ?? authorizer?.username ?? authorizer?.principalId;
 
-  return rawUserId ? toAppUsername(rawUserId) : '';
+  return rawuserId ? toAppUsername(rawuserId) : '';
 }
 
 const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
