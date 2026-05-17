@@ -13,7 +13,7 @@ export type RequestNotification = {
   targetSk?: string;
   reason: string;
   comment?: string | null;
-  decidedAt: string;
+  createdAt: string;
   actorUsername: string;
   readAt?: string;
 };

@@ -18,7 +18,7 @@ class LambdaHandler {
       return APIResponse.error(500, 'Missing notifications table configuration');
     }
 
-    const userId = getuserId(event);
+    const userId = getUserId(event);
     if (!userId) {
       return APIResponse.error(401, 'Invalid token');
     }
@@ -89,11 +89,11 @@ class LambdaHandler {
     );
 
     const item = response.Items?.[0];
-    if (!item?.userId || !item.decidedAt) return undefined;
+    if (!item?.userId || !item.createdAt) return undefined;
 
     return {
       userId: item.userId,
-      decidedAt: item.decidedAt,
+      createdAt: item.createdAt,
     };
   }
 
@@ -110,7 +110,7 @@ class LambdaHandler {
           FilterExpression: 'attribute_not_exists(#readAt)',
           ExpressionAttributeNames: {
             '#userId': 'userId',
-            '#createdAt': 'decidedAt',
+            '#createdAt': 'createdAt',
             '#readAt': 'readAt',
           },
           ExpressionAttributeValues: {
@@ -129,7 +129,7 @@ class LambdaHandler {
   }
 }
 
-function getuserId(event: APIGatewayProxyEvent): string {
+function getUserId(event: APIGatewayProxyEvent): string {
   const claims = event.requestContext?.authorizer?.claims ?? {};
   const username = claims.username;
 
