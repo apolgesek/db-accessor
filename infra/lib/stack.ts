@@ -21,8 +21,6 @@ import { createRequesterEmailPolicyStatement } from './requester-email-policy';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
-  githubOrg: string;
-  githubRepo: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
   allowedIp: string;
@@ -34,7 +32,6 @@ export class DbAccessorStack extends cdk.Stack {
     super(scope, id, props);
     const stack = cdk.Stack.of(this);
     const projectName = props.projectName + '-' + props.stage;
-    const ghOidcProviderArn = `arn:aws:iam::${stack.account}:oidc-provider/token.actions.githubusercontent.com`;
 
     const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
@@ -629,75 +626,9 @@ export class DbAccessorStack extends cdk.Stack {
       ]),
     });
 
-    // --- OIDC provider (imported) ---
-    const oidcProvider = iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
-      this,
-      'GitHubOidcProvider',
-      ghOidcProviderArn,
-    );
-
-    // --- Federated principal for GitHub Actions ---
-    const assumedBy = new iam.FederatedPrincipal(
-      oidcProvider.openIdConnectProviderArn,
-      {
-        StringEquals: {
-          'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
-        },
-        StringLike: {
-          'token.actions.githubusercontent.com:sub': `repo:${props.githubOrg}/${props.githubRepo}:*`,
-        },
-      },
-      'sts:AssumeRoleWithWebIdentity',
-    );
-
-    // --- CDK role: for cdk diff/deploy of this stack ---
-    const cdkRole = new iam.Role(this, `GitHubCdkRole`, {
-      roleName: `${projectName}-github-cdk`,
-      assumedBy,
-      description: 'Role assumed by GitHub Actions to run cdk diff/deploy for this stack',
-    });
-
-    // --- CDK bootstrap integration (assume bootstrap roles + read bootstrap version) ---
-    const qualifier = 'hnb659fds'; // default CDK bootstrap qualifier
-
-    const bootstrapVersionParamArn = stack.formatArn({
-      service: 'ssm',
-      resource: 'parameter',
-      resourceName: `/cdk-bootstrap/${qualifier}/version`,
-    });
-
-    const filePublishingRoleArn = `arn:aws:iam::${stack.account}:role/cdk-${qualifier}-file-publishing-role-${stack.account}-${stack.region}`;
-    const deployRoleArn = `arn:aws:iam::${stack.account}:role/cdk-${qualifier}-deploy-role-${stack.account}-${stack.region}`;
-    const lookupRoleArn = `arn:aws:iam::${stack.account}:role/cdk-${qualifier}-lookup-role-${stack.account}-${stack.region}`;
-
-    // Allow GitHubCdkRole to assume CDK bootstrap roles (assets, deploy, lookup)
-    cdkRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'AssumeCdkBootstrapRoles',
-        effect: iam.Effect.ALLOW,
-        actions: ['sts:AssumeRole'],
-        resources: [filePublishingRoleArn, deployRoleArn, lookupRoleArn],
-      }),
-    );
-
-    // Allow reading the bootstrap stack version (CDK requires this)
-    cdkRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: 'ReadCdkBootstrapVersion',
-        effect: iam.Effect.ALLOW,
-        actions: ['ssm:GetParameter'],
-        resources: [bootstrapVersionParamArn],
-      }),
-    );
-
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
     new cdk.CfnOutput(this, 'WebSocketUrl', {
       value: `wss://${websocketApi.apiId}.execute-api.${stack.region}.${stack.urlSuffix}/${props.stage}`,
-    });
-
-    new cdk.CfnOutput(this, 'GitHubCdkRoleArn', {
-      value: cdkRole.roleArn,
-      description: 'ARN to use for CDK diff/deploy from GitHub',
     });
   }
 }

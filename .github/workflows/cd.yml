@@ -84,7 +84,7 @@ jobs:
       - name: Deploy CDK stack
         working-directory: infra
         run: |
-          npx cdk deploy --all --require-approval never --verbose
+          npx cdk deploy DbAccessorStack --require-approval never --verbose
 
       - name: Add info to job summary
         working-directory: infra

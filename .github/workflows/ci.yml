@@ -235,7 +235,7 @@ jobs:
         id: cdk_diff
         working-directory: infra
         run: |
-          npx cdk diff --all > cdk-diff.txt || true
+          npx cdk diff DbAccessorStack > cdk-diff.txt || true
           cat cdk-diff.txt
 
       - name: Add CDK diff to summary
