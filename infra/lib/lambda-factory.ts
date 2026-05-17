@@ -1,5 +1,6 @@
 import path from 'path';
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -10,6 +11,7 @@ export interface CreateLambdaOptions {
   environment?: Record<string, string>;
   timeout?: cdk.Duration;
   createLogGroup?: boolean;
+  role?: iam.IRole;
 }
 
 export function createLambda(scope: Construct, options: CreateLambdaOptions) {
@@ -26,6 +28,7 @@ export function createLambda(scope: Construct, options: CreateLambdaOptions) {
     architecture: lambda.Architecture.X86_64,
     environment: options.environment,
     timeout: options.timeout,
+    role: options.role,
     bundling: { minify: true, sourceMap: true, target: 'es2020' },
   });
 
