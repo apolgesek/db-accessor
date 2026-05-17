@@ -637,10 +637,15 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
 
+    const preTokenGenerationRole = new iam.Role(this, `${projectName}-pre-token-generation-role`, {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      description: 'Execution role for Cognito pre-token-generation Lambda without CloudWatch Logs permissions',
+    });
     const preTokenGenerationFn = createLambda(this, {
       projectName,
       fnName: 'pre-token-generation',
       createLogGroup: false,
+      role: preTokenGenerationRole,
     });
 
     preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
