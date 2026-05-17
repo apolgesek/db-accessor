@@ -8,12 +8,12 @@ import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 import { createLambda } from './lambda-factory';
 import { createRequestStatusEmailPolicyStatement } from './request-status-email-policy';
@@ -32,13 +32,14 @@ export class DbAccessorStack extends cdk.Stack {
     super(scope, id, props);
     const stack = cdk.Stack.of(this);
     const projectName = props.projectName + '-' + props.stage;
+    const tableRemovalPolicy = props.stage === 'dev' ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN;
 
     const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
+      removalPolicy: tableRemovalPolicy,
     });
 
     const grantTable = new dynamodb.Table(this, `${projectName}-grants`, {
@@ -46,7 +47,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
+      removalPolicy: tableRemovalPolicy,
     });
 
     const rulesetTable = new dynamodb.Table(this, `${projectName}-rulesets`, {
@@ -54,7 +55,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // keep data safe
+      removalPolicy: tableRemovalPolicy,
     });
 
     const notificationTable = new dynamodb.Table(this, `${projectName}-notifications`, {
@@ -62,7 +63,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: tableRemovalPolicy,
     });
     notificationTable.addGlobalSecondaryIndex({
       indexName: 'gsiUserNotification',
@@ -75,7 +76,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: 'ttl',
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: tableRemovalPolicy,
     });
 
     websocketConnectionTable.addGlobalSecondaryIndex({
@@ -647,54 +648,44 @@ export class DbAccessorStack extends cdk.Stack {
       createLogGroup: false,
       role: preTokenGenerationRole,
     });
+    const userPoolArn = Stack.of(this).formatArn({
+      service: 'cognito-idp',
+      resource: 'userpool',
+      resourceName: props.cognitoUserPoolId,
+    });
 
-    preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
-      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
-      sourceArn: Stack.of(this).formatArn({
-        service: 'cognito-idp',
-        resource: 'userpool',
-        resourceName: props.cognitoUserPoolId,
+    const preTokenGenerationPermission = new lambda.CfnPermission(
+      this,
+      `${projectName}-pre-token-generation-permission`,
+      {
+        action: 'lambda:InvokeFunction',
+        functionName: preTokenGenerationFn.functionArn,
+        principal: 'cognito-idp.amazonaws.com',
+        sourceArn: userPoolArn,
+      },
+    );
+
+    const configureUserPoolTriggerFn = createLambda(this, {
+      projectName,
+      fnName: 'configure-user-pool-trigger',
+      timeout: cdk.Duration.seconds(30),
+    });
+    configureUserPoolTriggerFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cognito-idp:DescribeUserPool', 'cognito-idp:UpdateUserPool'],
+        resources: [userPoolArn],
       }),
-    });
+    );
 
-    new cr.AwsCustomResource(this, 'UpdateUserPoolLambdaConfig', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: props.cognitoUserPoolId,
-          LambdaConfig: {
-            PreTokenGeneration: preTokenGenerationFn.functionArn,
-            PreTokenGenerationConfig: {
-              LambdaArn: preTokenGenerationFn.functionArn,
-              LambdaVersion: 'V3_0',
-            },
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${props.cognitoUserPoolId}-LambdaConfig`),
+    const userPoolLambdaConfig = new cdk.CustomResource(this, 'UpdateUserPoolLambdaConfig', {
+      serviceToken: configureUserPoolTriggerFn.functionArn,
+      properties: {
+        UserPoolId: props.cognitoUserPoolId,
+        LambdaArn: preTokenGenerationFn.functionArn,
+        LambdaVersion: 'V3_0',
       },
-      onUpdate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: props.cognitoUserPoolId,
-          LambdaConfig: {
-            PreTokenGeneration: preTokenGenerationFn.functionArn,
-            PreTokenGenerationConfig: {
-              LambdaArn: preTokenGenerationFn.functionArn,
-              LambdaVersion: 'V3_0',
-            },
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of(`${props.cognitoUserPoolId}-LambdaConfig`),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:UpdateUserPool'],
-          resources: ['*'], // tighten if you prefer
-        }),
-      ]),
     });
+    userPoolLambdaConfig.node.addDependency(preTokenGenerationPermission);
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
     new cdk.CfnOutput(this, 'WebSocketUrl', {
