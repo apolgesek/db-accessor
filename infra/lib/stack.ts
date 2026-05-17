@@ -10,12 +10,13 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
-import { createLambda } from './lambda-factory';
+import { CreateLambdaOptions, createLambda } from './lambda-factory';
 import { createRequestStatusEmailPolicyStatement } from './request-status-email-policy';
 import { createRequesterEmailPolicyStatement } from './requester-email-policy';
 
@@ -32,14 +33,24 @@ export class DbAccessorStack extends cdk.Stack {
     super(scope, id, props);
     const stack = cdk.Stack.of(this);
     const projectName = props.projectName + '-' + props.stage;
-    const tableRemovalPolicy = props.stage === 'dev' ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN;
+    const removalPolicy = props.stage === 'dev' ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN;
+    const lambdaLogRetention = props.stage === 'dev' ? logs.RetentionDays.THREE_MONTHS : logs.RetentionDays.ONE_YEAR;
+    const createStackLambda = (
+      options: Omit<CreateLambdaOptions, 'projectName' | 'logGroupRemovalPolicy' | 'logRetention'>,
+    ) =>
+      createLambda(this, {
+        ...options,
+        projectName,
+        logGroupRemovalPolicy: removalPolicy,
+        logRetention: lambdaLogRetention,
+      });
 
     const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: tableRemovalPolicy,
+      removalPolicy: removalPolicy,
     });
 
     const grantTable = new dynamodb.Table(this, `${projectName}-grants`, {
@@ -47,7 +58,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: tableRemovalPolicy,
+      removalPolicy: removalPolicy,
     });
 
     const rulesetTable = new dynamodb.Table(this, `${projectName}-rulesets`, {
@@ -55,7 +66,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: tableRemovalPolicy,
+      removalPolicy: removalPolicy,
     });
 
     const notificationTable = new dynamodb.Table(this, `${projectName}-notifications`, {
@@ -63,7 +74,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: tableRemovalPolicy,
+      removalPolicy: removalPolicy,
     });
     notificationTable.addGlobalSecondaryIndex({
       indexName: 'gsiUserNotification',
@@ -76,7 +87,7 @@ export class DbAccessorStack extends cdk.Stack {
       partitionKey: { name: 'connectionId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: 'ttl',
-      removalPolicy: tableRemovalPolicy,
+      removalPolicy: removalPolicy,
     });
 
     websocketConnectionTable.addGlobalSecondaryIndex({
@@ -185,8 +196,7 @@ export class DbAccessorStack extends cdk.Stack {
       REQUEST_STATUS_EMAIL_SOURCE: requestStatusEmailSource,
     };
 
-    const getRecordFn = createLambda(this, {
-      projectName,
+    const getRecordFn = createStackLambda({
       fnName: 'get-record',
       environment: {
         AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
@@ -201,8 +211,7 @@ export class DbAccessorStack extends cdk.Stack {
     issueTrackingAuditQueue.grantSendMessages(getRecordFn);
     rulesetTable.grantReadData(getRecordFn);
 
-    const issueTrackingAuditWorkerFn = createLambda(this, {
-      projectName,
+    const issueTrackingAuditWorkerFn = createStackLambda({
       fnName: 'issue-tracking-audit-worker',
       environment: {
         ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
@@ -219,8 +228,7 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const websocketConnectFn = createLambda(this, {
-      projectName,
+    const websocketConnectFn = createStackLambda({
       fnName: 'websocket-connect',
       environment: {
         WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
@@ -229,8 +237,7 @@ export class DbAccessorStack extends cdk.Stack {
     });
     websocketConnectionTable.grantWriteData(websocketConnectFn);
 
-    const websocketAuthorizerFn = createLambda(this, {
-      projectName,
+    const websocketAuthorizerFn = createStackLambda({
       fnName: 'websocket-authorizer',
       environment: sharedVars,
     });
@@ -243,8 +250,7 @@ export class DbAccessorStack extends cdk.Stack {
       },
     );
 
-    const websocketDisconnectFn = createLambda(this, {
-      projectName,
+    const websocketDisconnectFn = createStackLambda({
       fnName: 'websocket-disconnect',
       environment: {
         WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
@@ -280,8 +286,7 @@ export class DbAccessorStack extends cdk.Stack {
       Stage: props.stage,
     });
 
-    const requestStatusEmailWorkerFn = createLambda(this, {
-      projectName,
+    const requestStatusEmailWorkerFn = createStackLambda({
       fnName: 'request-status-email-worker',
       environment: {
         ...sharedVars,
@@ -301,8 +306,7 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const requestStatusNotificationWorkerFn = createLambda(this, {
-      projectName,
+    const requestStatusNotificationWorkerFn = createStackLambda({
       fnName: 'request-status-notification-worker',
       environment: {
         NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
@@ -341,8 +345,7 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const getAccountsFn = createLambda(this, {
-      projectName,
+    const getAccountsFn = createStackLambda({
       fnName: 'get-accounts',
       environment: {
         AWS_MANAGEMENT_ACCOUNT: managementaccountId,
@@ -364,8 +367,7 @@ export class DbAccessorStack extends cdk.Stack {
         resources: [`arn:aws:ssm:${stack.region}::parameter/aws/service/global-infrastructure/regions*`],
       }),
     );
-    const getTablesFn = createLambda(this, {
-      projectName,
+    const getTablesFn = createStackLambda({
       fnName: 'get-tables',
       environment: sharedVars,
     });
@@ -376,8 +378,7 @@ export class DbAccessorStack extends cdk.Stack {
         resources: assumeRoleArns,
       }),
     );
-    const createRequestFn = createLambda(this, {
-      projectName,
+    const createRequestFn = createStackLambda({
       fnName: 'create-request',
       environment: sharedVars,
     });
@@ -389,20 +390,17 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
     grantTable.grantWriteData(createRequestFn);
-    const createUnredactRequestFn = createLambda(this, {
-      projectName,
+    const createUnredactRequestFn = createStackLambda({
       fnName: 'create-unredact-request',
       environment: sharedVars,
     });
     grantTable.grantReadWriteData(createUnredactRequestFn);
-    const getRequestFn = createLambda(this, {
-      projectName,
+    const getRequestFn = createStackLambda({
       fnName: 'get-request',
       environment: sharedVars,
     });
     grantTable.grantReadData(getRequestFn);
-    const getNotificationsFn = createLambda(this, {
-      projectName,
+    const getNotificationsFn = createStackLambda({
       fnName: 'get-notifications',
       environment: {
         NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
@@ -410,8 +408,7 @@ export class DbAccessorStack extends cdk.Stack {
       },
     });
     notificationTable.grantReadData(getNotificationsFn);
-    const markNotificationsReadFn = createLambda(this, {
-      projectName,
+    const markNotificationsReadFn = createStackLambda({
       fnName: 'mark-notifications-read',
       environment: {
         NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
@@ -419,14 +416,12 @@ export class DbAccessorStack extends cdk.Stack {
       },
     });
     notificationTable.grantReadWriteData(markNotificationsReadFn);
-    const adminGetRequestFn = createLambda(this, {
-      projectName,
+    const adminGetRequestFn = createStackLambda({
       fnName: 'admin-get-request',
       environment: sharedVars,
     });
     grantTable.grantReadData(adminGetRequestFn);
-    const adminApproveRequestFn = createLambda(this, {
-      projectName,
+    const adminApproveRequestFn = createStackLambda({
       fnName: 'admin-approve-request',
       environment: {
         ...sharedVars,
@@ -436,8 +431,7 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantReadWriteData(adminApproveRequestFn);
     requestStatusTopic.grantPublish(adminApproveRequestFn);
-    const adminRejectRequestFn = createLambda(this, {
-      projectName,
+    const adminRejectRequestFn = createStackLambda({
       fnName: 'admin-reject-request',
       environment: {
         ...sharedVars,
@@ -447,8 +441,7 @@ export class DbAccessorStack extends cdk.Stack {
     });
     grantTable.grantReadWriteData(adminRejectRequestFn);
     requestStatusTopic.grantPublish(adminRejectRequestFn);
-    const adminCreateRulesetFn = createLambda(this, {
-      projectName,
+    const adminCreateRulesetFn = createStackLambda({
       fnName: 'admin-create-ruleset',
       environment: {
         RULESET_TABLE_NAME: rulesetTable.tableName,
@@ -464,8 +457,7 @@ export class DbAccessorStack extends cdk.Stack {
     );
     rulesetTable.grantWriteData(adminCreateRulesetFn);
 
-    const adminGetRulesetFn = createLambda(this, {
-      projectName,
+    const adminGetRulesetFn = createStackLambda({
       fnName: 'admin-get-ruleset',
       environment: {
         RULESET_TABLE_NAME: rulesetTable.tableName,
@@ -642,8 +634,7 @@ export class DbAccessorStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       description: 'Execution role for Cognito pre-token-generation Lambda without CloudWatch Logs permissions',
     });
-    const preTokenGenerationFn = createLambda(this, {
-      projectName,
+    const preTokenGenerationFn = createStackLambda({
       fnName: 'pre-token-generation',
       createLogGroup: false,
       role: preTokenGenerationRole,
@@ -665,8 +656,7 @@ export class DbAccessorStack extends cdk.Stack {
       },
     );
 
-    const configureUserPoolTriggerFn = createLambda(this, {
-      projectName,
+    const configureUserPoolTriggerFn = createStackLambda({
       fnName: 'configure-user-pool-trigger',
       timeout: cdk.Duration.seconds(30),
     });
@@ -694,4 +684,4 @@ export class DbAccessorStack extends cdk.Stack {
   }
 }
 
-// refresh 20260517-1
+// refresh 20260517-2
