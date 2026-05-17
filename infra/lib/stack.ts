@@ -184,28 +184,31 @@ export class DbAccessorStack extends cdk.Stack {
       REQUEST_STATUS_EMAIL_SOURCE: requestStatusEmailSource,
     };
 
-    const getRecordFn = createLambda(this, projectName, 'get-record', {
-      AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
-      ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
-      RULESET_TABLE_NAME: rulesetTable.tableName,
-      STAGE: props.stage,
-      ...sharedVars,
+    const getRecordFn = createLambda(this, {
+      projectName,
+      fnName: 'get-record',
+      environment: {
+        AUDIT_LOGS_TABLE_NAME: auditTable.tableName,
+        ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
+        RULESET_TABLE_NAME: rulesetTable.tableName,
+        STAGE: props.stage,
+        ...sharedVars,
+      },
     });
     auditTable.grantWriteData(getRecordFn);
     grantTable.grantReadData(getRecordFn);
     issueTrackingAuditQueue.grantSendMessages(getRecordFn);
     rulesetTable.grantReadData(getRecordFn);
 
-    const issueTrackingAuditWorkerFn = createLambda(
-      this,
+    const issueTrackingAuditWorkerFn = createLambda(this, {
       projectName,
-      'issue-tracking-audit-worker',
-      {
+      fnName: 'issue-tracking-audit-worker',
+      environment: {
         ISSUE_TRACKING_AUDIT_QUEUE_URL: issueTrackingAuditQueue.queueUrl,
         ISSUE_TRACKING_SECRET_NAME: issueTrackingSecret.secretName,
       },
-      { timeout: cdk.Duration.seconds(30) },
-    );
+      timeout: cdk.Duration.seconds(30),
+    });
     issueTrackingSecret.grantRead(issueTrackingAuditWorkerFn);
     issueTrackingAuditQueue.grantConsumeMessages(issueTrackingAuditWorkerFn);
     issueTrackingAuditWorkerFn.addEventSource(
@@ -215,13 +218,21 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const websocketConnectFn = createLambda(this, projectName, 'websocket-connect', {
-      WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
-      ...sharedVars,
+    const websocketConnectFn = createLambda(this, {
+      projectName,
+      fnName: 'websocket-connect',
+      environment: {
+        WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+        ...sharedVars,
+      },
     });
     websocketConnectionTable.grantWriteData(websocketConnectFn);
 
-    const websocketAuthorizerFn = createLambda(this, projectName, 'websocket-authorizer', sharedVars);
+    const websocketAuthorizerFn = createLambda(this, {
+      projectName,
+      fnName: 'websocket-authorizer',
+      environment: sharedVars,
+    });
     const websocketAuthorizer = new apigwv2Authorizers.WebSocketLambdaAuthorizer(
       `${projectName}-websocket-authorizer`,
       websocketAuthorizerFn,
@@ -231,8 +242,12 @@ export class DbAccessorStack extends cdk.Stack {
       },
     );
 
-    const websocketDisconnectFn = createLambda(this, projectName, 'websocket-disconnect', {
-      WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+    const websocketDisconnectFn = createLambda(this, {
+      projectName,
+      fnName: 'websocket-disconnect',
+      environment: {
+        WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
+      },
     });
     websocketConnectionTable.grantWriteData(websocketDisconnectFn);
 
@@ -264,16 +279,15 @@ export class DbAccessorStack extends cdk.Stack {
       Stage: props.stage,
     });
 
-    const requestStatusEmailWorkerFn = createLambda(
-      this,
+    const requestStatusEmailWorkerFn = createLambda(this, {
       projectName,
-      'request-status-email-worker',
-      {
+      fnName: 'request-status-email-worker',
+      environment: {
         ...sharedVars,
         ...requestStatusEmailVars,
       },
-      { timeout: cdk.Duration.seconds(30) },
-    );
+      timeout: cdk.Duration.seconds(30),
+    });
     requestStatusEmailQueue.grantConsumeMessages(requestStatusEmailWorkerFn);
     requestStatusEmailWorkerFn.addToRolePolicy(
       createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource),
@@ -286,17 +300,16 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const requestStatusNotificationWorkerFn = createLambda(
-      this,
+    const requestStatusNotificationWorkerFn = createLambda(this, {
       projectName,
-      'request-status-notification-worker',
-      {
+      fnName: 'request-status-notification-worker',
+      environment: {
         NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
         WEBSOCKET_CONNECTIONS_TABLE_NAME: websocketConnectionTable.tableName,
         WEBSOCKET_ENDPOINT: websocketEndpoint,
       },
-      { timeout: cdk.Duration.seconds(30) },
-    );
+      timeout: cdk.Duration.seconds(30),
+    });
     requestStatusNotificationQueue.grantConsumeMessages(requestStatusNotificationWorkerFn);
     notificationTable.grantWriteData(requestStatusNotificationWorkerFn);
     websocketConnectionTable.grantReadWriteData(requestStatusNotificationWorkerFn);
@@ -327,10 +340,14 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
 
-    const getAccountsFn = createLambda(this, projectName, 'get-accounts', {
-      AWS_MANAGEMENT_ACCOUNT: managementaccountId,
-      AWS_ACCOUNTS: assumeRoleArns.map((arn) => parse(arn).accountId).join(','),
-      ...sharedVars,
+    const getAccountsFn = createLambda(this, {
+      projectName,
+      fnName: 'get-accounts',
+      environment: {
+        AWS_MANAGEMENT_ACCOUNT: managementaccountId,
+        AWS_ACCOUNTS: assumeRoleArns.map((arn) => parse(arn).accountId).join(','),
+        ...sharedVars,
+      },
     });
     getAccountsFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -346,7 +363,11 @@ export class DbAccessorStack extends cdk.Stack {
         resources: [`arn:aws:ssm:${stack.region}::parameter/aws/service/global-infrastructure/regions*`],
       }),
     );
-    const getTablesFn = createLambda(this, projectName, 'get-tables', sharedVars);
+    const getTablesFn = createLambda(this, {
+      projectName,
+      fnName: 'get-tables',
+      environment: sharedVars,
+    });
     getTablesFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -354,7 +375,11 @@ export class DbAccessorStack extends cdk.Stack {
         resources: assumeRoleArns,
       }),
     );
-    const createRequestFn = createLambda(this, projectName, 'create-request', sharedVars);
+    const createRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'create-request',
+      environment: sharedVars,
+    });
     createRequestFn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -363,39 +388,71 @@ export class DbAccessorStack extends cdk.Stack {
       }),
     );
     grantTable.grantWriteData(createRequestFn);
-    const createUnredactRequestFn = createLambda(this, projectName, 'create-unredact-request', sharedVars);
+    const createUnredactRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'create-unredact-request',
+      environment: sharedVars,
+    });
     grantTable.grantReadWriteData(createUnredactRequestFn);
-    const getRequestFn = createLambda(this, projectName, 'get-request', sharedVars);
+    const getRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'get-request',
+      environment: sharedVars,
+    });
     grantTable.grantReadData(getRequestFn);
-    const getNotificationsFn = createLambda(this, projectName, 'get-notifications', {
-      NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
-      ...sharedVars,
+    const getNotificationsFn = createLambda(this, {
+      projectName,
+      fnName: 'get-notifications',
+      environment: {
+        NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
+        ...sharedVars,
+      },
     });
     notificationTable.grantReadData(getNotificationsFn);
-    const markNotificationsReadFn = createLambda(this, projectName, 'mark-notifications-read', {
-      NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
-      ...sharedVars,
+    const markNotificationsReadFn = createLambda(this, {
+      projectName,
+      fnName: 'mark-notifications-read',
+      environment: {
+        NOTIFICATIONS_TABLE_NAME: notificationTable.tableName,
+        ...sharedVars,
+      },
     });
     notificationTable.grantReadWriteData(markNotificationsReadFn);
-    const adminGetRequestFn = createLambda(this, projectName, 'admin-get-request', sharedVars);
+    const adminGetRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'admin-get-request',
+      environment: sharedVars,
+    });
     grantTable.grantReadData(adminGetRequestFn);
-    const adminApproveRequestFn = createLambda(this, projectName, 'admin-approve-request', {
-      ...sharedVars,
-      REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
-      STAGE: props.stage,
+    const adminApproveRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'admin-approve-request',
+      environment: {
+        ...sharedVars,
+        REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
+        STAGE: props.stage,
+      },
     });
     grantTable.grantReadWriteData(adminApproveRequestFn);
     requestStatusTopic.grantPublish(adminApproveRequestFn);
-    const adminRejectRequestFn = createLambda(this, projectName, 'admin-reject-request', {
-      ...sharedVars,
-      REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
-      STAGE: props.stage,
+    const adminRejectRequestFn = createLambda(this, {
+      projectName,
+      fnName: 'admin-reject-request',
+      environment: {
+        ...sharedVars,
+        REQUEST_STATUS_TOPIC_ARN: requestStatusTopic.topicArn,
+        STAGE: props.stage,
+      },
     });
     grantTable.grantReadWriteData(adminRejectRequestFn);
     requestStatusTopic.grantPublish(adminRejectRequestFn);
-    const adminCreateRulesetFn = createLambda(this, projectName, 'admin-create-ruleset', {
-      RULESET_TABLE_NAME: rulesetTable.tableName,
-      ...sharedVars,
+    const adminCreateRulesetFn = createLambda(this, {
+      projectName,
+      fnName: 'admin-create-ruleset',
+      environment: {
+        RULESET_TABLE_NAME: rulesetTable.tableName,
+        ...sharedVars,
+      },
     });
     adminCreateRulesetFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -406,9 +463,13 @@ export class DbAccessorStack extends cdk.Stack {
     );
     rulesetTable.grantWriteData(adminCreateRulesetFn);
 
-    const adminGetRulesetFn = createLambda(this, projectName, 'admin-get-ruleset', {
-      RULESET_TABLE_NAME: rulesetTable.tableName,
-      ...sharedVars,
+    const adminGetRulesetFn = createLambda(this, {
+      projectName,
+      fnName: 'admin-get-ruleset',
+      environment: {
+        RULESET_TABLE_NAME: rulesetTable.tableName,
+        ...sharedVars,
+      },
     });
     rulesetTable.grantReadData(adminGetRulesetFn);
 
@@ -576,7 +637,11 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
 
-    const preTokenGenerationFn = createLambda(this, projectName, 'pre-token-generation');
+    const preTokenGenerationFn = createLambda(this, {
+      projectName,
+      fnName: 'pre-token-generation',
+      createLogGroup: false,
+    });
 
     preTokenGenerationFn.addPermission('AllowCognitoInvokeImported', {
       principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
