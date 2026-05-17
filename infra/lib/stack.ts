@@ -63,7 +63,7 @@ export class DbAccessorStack extends cdk.Stack {
     const notificationTable = new dynamodb.Table(this, `${projectName}-notifications`, {
       tableName: `${projectName}-notifications`,
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'decidedAt', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
@@ -702,4 +702,4 @@ export class DbAccessorStack extends cdk.Stack {
   }
 }
 
-// refresh
+// refresh 20260517

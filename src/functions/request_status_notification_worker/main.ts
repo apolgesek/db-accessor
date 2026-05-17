@@ -42,7 +42,7 @@ class DynamoDbNotificationStore {
           targetSk: { S: notification.targetSk ?? '' },
           reason: { S: notification.reason },
           comment: { S: notification.comment ?? '' },
-          decidedAt: { S: notification.decidedAt },
+          createdAt: { S: notification.createdAt },
           actorUsername: { S: notification.actorUsername },
         },
       }),
@@ -128,9 +128,10 @@ class LambdaHandler {
   private async processRecord(record: SQSRecord): Promise<void> {
     const event = parseRequestStatusEvent(record.body);
     const requestId = getRequestIdFromSk(event.request.sk);
+    const createdAt = event.decidedAt;
     const notification: RequestNotification = {
       type: 'REQUEST_STATUS_CHANGED',
-      id: `${event.decidedAt}#${requestId}`,
+      id: `${createdAt}#${requestId}`,
       userId: event.request.userId,
       status: event.status,
       requestId,
@@ -143,7 +144,7 @@ class LambdaHandler {
       targetSk: event.request.targetSk,
       reason: event.request.reason,
       comment: event.request.comment,
-      decidedAt: event.decidedAt,
+      createdAt,
       actorUsername: event.actor.username,
     };
 

@@ -7,7 +7,7 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const connectionId = event.requestContext.connectionId;
-    const userId = getuserId(event);
+    const userId = getUserId(event);
 
     if (!connectionId) {
       return { statusCode: 400, body: 'Missing connectionId' };
@@ -23,7 +23,7 @@ class LambdaHandler {
         Item: {
           connectionId: { S: connectionId },
           userId: { S: userId },
-          ConnectedAt: { S: new Date().toISOString() },
+          connectedAt: { S: new Date().toISOString() },
           ttl: { N: Math.floor(Date.now() / 1000 + 86_400).toString() },
         },
       }),
@@ -33,13 +33,13 @@ class LambdaHandler {
   }
 }
 
-function getuserId(event: APIGatewayProxyEvent): string {
+function getUserId(event: APIGatewayProxyEvent): string {
   const authorizer = event.requestContext.authorizer as
     | { principalId?: string; username?: string; claims?: { username?: string } }
     | undefined;
-  const rawuserId = authorizer?.claims?.username ?? authorizer?.username ?? authorizer?.principalId;
+  const rawUserId = authorizer?.claims?.username ?? authorizer?.username ?? authorizer?.principalId;
 
-  return rawuserId ? toAppUsername(rawuserId) : '';
+  return rawUserId ? toAppUsername(rawUserId) : '';
 }
 
 const handlerInstance = new LambdaHandler(new DynamoDBClient({ region: process.env.AWS_REGION }));
