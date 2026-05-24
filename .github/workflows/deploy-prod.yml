@@ -1,4 +1,4 @@
-name: Deploy to Prd
+name: Deploy to Prod
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: cd-prd
+  group: cd-prod
   cancel-in-progress: false
 
 env:
@@ -74,7 +74,7 @@ jobs:
   deploy-prd:
     needs: [prepare-release]
     runs-on: ubuntu-latest
-    environment: prd
+    environment: prod
     env:
       STAGE: prod
       CDK_ROLE_TO_ASSUME_ARN: ${{ vars.CDK_ROLE_TO_ASSUME_ARN }}
