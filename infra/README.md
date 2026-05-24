@@ -1,3 +1,9 @@
+Deploy CDK toolkit:
+
+```powershell
+cdk bootstrap aws://349036690903/eu-central-1 --profile apolgesek-dev
+```
+
 Deploy the GitHub/CDK access stack once from local/admin credentials:
 
 ```powershell
