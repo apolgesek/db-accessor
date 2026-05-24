@@ -1,0 +1,143 @@
+name: Deploy to Prd
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to deploy (vX.Y.Z or X.Y.Z)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cd-prd
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-central-1
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+      commit_sha: ${{ steps.version.outputs.commit_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Validate release version
+        id: version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          INPUT_VERSION="$REQUESTED_VERSION"
+          INPUT_VERSION="${INPUT_VERSION#refs/tags/}"
+
+          if [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            RELEASE_TAG="v${INPUT_VERSION}"
+          elif [[ "$INPUT_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            RELEASE_TAG="$INPUT_VERSION"
+          else
+            echo "::error::Version must be a semver release tag like v1.2.3 or 1.2.3."
+            exit 1
+          fi
+
+          git fetch --tags --force
+
+          if ! git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "::error::Release tag ${RELEASE_TAG} does not exist."
+            exit 1
+          fi
+
+          COMMIT_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
+
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Add info to job summary
+        run: |
+          echo "## Production deployment candidate" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release tag: ${{ steps.version.outputs.release_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: ${{ steps.version.outputs.commit_sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: prd" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-prd:
+    needs: [prepare-release]
+    runs-on: ubuntu-latest
+    environment: prd
+    env:
+      STAGE: prod
+      CDK_ROLE_TO_ASSUME_ARN: ${{ vars.CDK_ROLE_TO_ASSUME_ARN }}
+      RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+      RELEASE_COMMIT_SHA: ${{ needs.prepare-release.outputs.commit_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Verify checked out release
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$RELEASE_COMMIT_SHA" ]]; then
+            echo "::error::Checked out ${ACTUAL_SHA}, expected ${RELEASE_COMMIT_SHA} for ${RELEASE_TAG}."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials for CDK deploy
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.CDK_ROLE_TO_ASSUME_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js for CDK
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Install infra dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: Deploy CDK stack
+        working-directory: infra
+        run: |
+          npx cdk deploy DbAccessorStack --require-approval never --verbose
+
+      - name: Add info to job summary
+        working-directory: infra
+        run: |
+          {
+            echo "## Production deploy summary"
+            echo
+            echo "- Release tag: ${RELEASE_TAG}"
+            echo "- Commit: ${RELEASE_COMMIT_SHA}"
+            echo "- Environment: prd"
+            echo
+            echo "## CDK outputs"
+            echo
+            echo "\`\`\`json"
+            if command -v jq >/dev/null 2>&1; then
+              jq . outputs.json
+            else
+              cat outputs.json
+            fi
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
