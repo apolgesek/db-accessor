@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
+import fs from 'fs';
+import path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { DbAccessorDeployAccessStack } from '../lib/deploy-access-stack';
 import { DbAccessorStack } from '../lib/stack';
@@ -13,6 +15,10 @@ const stage = process.env.STAGE as 'dev' | 'prod';
 const projectName = 'db-accessor';
 const githubOrg = 'apolgesek';
 const githubRepo = 'db-accessor';
+const domain = '4eyesdb.com';
+
+const samlMetadataFilePath = path.join('config', stage, 'idp', 'saml-metadata.xml');
+const samlMetadataFileContent = fs.readFileSync(path.resolve(samlMetadataFilePath), 'utf8');
 
 new DbAccessorDeployAccessStack(app, 'DbAccessorDeployAccessStack', {
   env,
@@ -23,10 +29,10 @@ new DbAccessorDeployAccessStack(app, 'DbAccessorDeployAccessStack', {
 });
 
 new DbAccessorStack(app, 'DbAccessorStack', {
+  projectName,
   env,
   stage,
-  projectName,
-  cognitoUserPoolId: 'eu-central-1_6rLj50DRM',
-  cognitoClientId: '6n5d5gru7c0ncf5npa0m5ls2n8',
+  domain,
   allowedIp: '63.176.89.71',
+  samlMetadataFileContent,
 });
