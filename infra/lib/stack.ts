@@ -25,7 +25,6 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
   stage: 'dev' | 'prod';
   domain: string;
-  allowedIp: string;
   samlMetadataFileContent?: string;
 }
 
@@ -47,21 +46,10 @@ export class DbAccessorStack extends cdk.Stack {
         logRetention: lambdaLogRetention,
       });
 
-    // custom domain global certificate
-    const globalCertificateArn = ssm.StringParameter.valueForStringParameter(
-      this,
-      `/db-accessor/acm/global-certificate-arn`,
-    );
-    const globalAcmCertificate = acm.Certificate.fromCertificateArn(
-      this,
-      `${projectName}-global-domain-cert`,
-      globalCertificateArn,
-    );
-
     // custom domain regional certificate
     const regionalCertificateArn = ssm.StringParameter.valueForStringParameter(
       this,
-      `/db-accessor/acm/regional-certificate-arn`,
+      `/${projectName}/acm/regional-certificate-arn`,
     );
     const regionalAcmCertificate = acm.Certificate.fromCertificateArn(
       this,
@@ -75,7 +63,6 @@ export class DbAccessorStack extends cdk.Stack {
       domain: props.domain,
       removalPolicy,
       lambdaLogRetention,
-      acmCertificate: globalAcmCertificate,
       samlMetadataFileContent: props.samlMetadataFileContent,
     });
     const { userPool, userPoolClient, userPoolDomain, samlProvider } = cognitoResources;
@@ -316,7 +303,7 @@ export class DbAccessorStack extends cdk.Stack {
       autoDeploy: true,
     });
 
-    const websocketDomainName = `${props.stage}-ws.${props.domain}`;
+    const websocketDomainName = `$ws.${props.domain}`;
     const websocketDomain = new apigwv2.DomainName(this, `${projectName}-websocket-domain`, {
       domainName: websocketDomainName,
       certificate: regionalAcmCertificate,
@@ -509,13 +496,15 @@ export class DbAccessorStack extends cdk.Stack {
     });
     rulesetTable.grantReadData(adminGetRulesetFn);
 
-    const apiDomainName = `${props.stage}-api.${props.domain}`;
+    const apiDomainName = `api.${props.domain}`;
     const api = new apigw.RestApi(this, `${projectName}-rest-api`, {
       deployOptions: { stageName: props.stage },
       domainName: {
-        certificate: globalAcmCertificate,
+        certificate: regionalAcmCertificate,
         domainName: apiDomainName,
+        endpointType: apigw.EndpointType.REGIONAL,
       },
+      endpointTypes: [apigw.EndpointType.REGIONAL],
     });
     api.addToResourcePolicy(
       new iam.PolicyStatement({
@@ -523,11 +512,6 @@ export class DbAccessorStack extends cdk.Stack {
         principals: [new iam.AnyPrincipal()],
         actions: ['execute-api:Invoke'],
         resources: ['*'],
-        conditions: {
-          IpAddress: {
-            'aws:SourceIp': `${props.allowedIp}/32`,
-          },
-        },
       }),
     );
 

@@ -15,7 +15,7 @@ const stage = process.env.STAGE as 'dev' | 'prod';
 const projectName = 'db-accessor';
 const githubOrg = 'apolgesek';
 const githubRepo = 'db-accessor';
-const domain = '4eyesdb.com';
+const domain = `${stage}.4eyesdb.com`;
 
 const samlMetadataFilePath = path.join('config', stage, 'idp', 'saml-metadata.xml');
 const samlMetadataFileContent = fs.readFileSync(path.resolve(samlMetadataFilePath), 'utf8');
@@ -33,6 +33,5 @@ new DbAccessorStack(app, 'DbAccessorStack', {
   env,
   stage,
   domain,
-  allowedIp: '63.176.89.71',
   samlMetadataFileContent,
 });

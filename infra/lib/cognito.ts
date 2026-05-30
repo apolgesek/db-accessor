@@ -1,8 +1,10 @@
 import * as cdk from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import { createLambda, CreateLambdaOptions } from './lambda-factory';
 
@@ -12,7 +14,6 @@ export interface CreateCognitoResourcesOptions {
   domain: string;
   removalPolicy: cdk.RemovalPolicy;
   lambdaLogRetention: logs.RetentionDays;
-  acmCertificate: cdk.aws_certificatemanager.ICertificate;
   samlMetadataFileContent?: string;
 }
 
@@ -131,18 +132,29 @@ export function createCognitoResources(scope: Construct, options: CreateCognitoR
         authorizationCodeGrant: true,
       },
       scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
-      callbackUrls: [`https://${options.stage}.${options.domain}`, 'http://localhost:4200'],
-      logoutUrls: [`https://${options.stage}.${options.domain}/login`, 'http://localhost:4200/login'],
+      callbackUrls: [`https://${options.domain}`, 'http://localhost:4200'],
+      logoutUrls: [`https://${options.domain}/login`, 'http://localhost:4200/login'],
     },
   });
   if (samlProvider) {
     userPoolClient.node.addDependency(samlProvider);
   }
 
+  // custom domain global certificate
+  const globalCertificateArn = ssm.StringParameter.valueForStringParameter(
+    scope,
+    `/${options.projectName}/acm/global-certificate-arn`,
+  );
+  const globalAcmCertificate = acm.Certificate.fromCertificateArn(
+    scope,
+    `${options.projectName}-global-domain-cert`,
+    globalCertificateArn,
+  );
+
   const userPoolDomain = userPool.addDomain(`${options.projectName}-domain`, {
     customDomain: {
-      domainName: `auth-${options.stage}.${options.domain}`,
-      certificate: options.acmCertificate,
+      domainName: `auth.${options.domain}`,
+      certificate: globalAcmCertificate,
     },
   });
 
