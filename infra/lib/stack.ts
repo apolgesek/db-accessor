@@ -702,4 +702,4 @@ export class DbAccessorStack extends cdk.Stack {
   }
 }
 
-// refresh 20260530-1
+// refresh 20260530-2
