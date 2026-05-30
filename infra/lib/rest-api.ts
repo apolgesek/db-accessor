@@ -1,5 +1,5 @@
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as cdk from 'aws-cdk-lib';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
@@ -7,27 +7,21 @@ import { DbAccessorLambdaFunctions } from './lambda-functions';
 
 export interface RestApiResources {
   api: apigw.RestApi;
-  apiDomainName: string;
+  apiOriginDomainName: string;
+  apiOriginPath: string;
 }
 
 export interface CreateRestApiOptions {
   projectName: string;
   stage: string;
-  domain: string;
-  regionalAcmCertificate: acm.ICertificate;
   userPool: cognito.IUserPool;
   lambdas: DbAccessorLambdaFunctions;
 }
 
 export function createRestApi(scope: Construct, options: CreateRestApiOptions): RestApiResources {
-  const apiDomainName = `api.${options.domain}`;
+  const stack = cdk.Stack.of(scope);
   const api = new apigw.RestApi(scope, `${options.projectName}-rest-api`, {
     deployOptions: { stageName: options.stage },
-    domainName: {
-      certificate: options.regionalAcmCertificate,
-      domainName: apiDomainName,
-      endpointType: apigw.EndpointType.REGIONAL,
-    },
     endpointTypes: [apigw.EndpointType.REGIONAL],
   });
   api.addToResourcePolicy(
@@ -152,5 +146,9 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
   );
   adminGetRuleset.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.adminGetRulesetFn), methodOptions);
 
-  return { api, apiDomainName };
+  return {
+    api,
+    apiOriginDomainName: `${api.restApiId}.execute-api.${stack.region}.${stack.urlSuffix}`,
+    apiOriginPath: `/${options.stage}`,
+  };
 }
