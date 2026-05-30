@@ -303,7 +303,7 @@ export class DbAccessorStack extends cdk.Stack {
       autoDeploy: true,
     });
 
-    const websocketDomainName = `$ws.${props.domain}`;
+    const websocketDomainName = `ws.${props.domain}`;
     const websocketDomain = new apigwv2.DomainName(this, `${projectName}-websocket-domain`, {
       domainName: websocketDomainName,
       certificate: regionalAcmCertificate,
