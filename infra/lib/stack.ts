@@ -1,36 +1,38 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { parse } from '@aws-sdk/util-arn-parser';
 import * as cdk from 'aws-cdk-lib';
-import { Stack } from 'aws-cdk-lib';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigwv2Authorizers from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 import * as apigwv2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
+import { createCognitoResources } from './cognito';
 import { CreateLambdaOptions, createLambda } from './lambda-factory';
 import { createRequestStatusEmailPolicyStatement } from './request-status-email-policy';
 import { createRequesterEmailPolicyStatement } from './requester-email-policy';
 
 export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
-  cognitoUserPoolId: string;
-  cognitoClientId: string;
-  allowedIp: string;
   stage: 'dev' | 'prod';
+  domain: string;
+  allowedIp: string;
+  samlMetadataFileContent?: string;
 }
 
 export class DbAccessorStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: DbAccessorStackProps) {
     super(scope, id, props);
+
     const stack = cdk.Stack.of(this);
     const projectName = props.projectName + '-' + props.stage;
     const removalPolicy = props.stage === 'dev' ? cdk.RemovalPolicy.DESTROY : cdk.RemovalPolicy.RETAIN;
@@ -44,6 +46,39 @@ export class DbAccessorStack extends cdk.Stack {
         logGroupRemovalPolicy: removalPolicy,
         logRetention: lambdaLogRetention,
       });
+
+    // custom domain global certificate
+    const globalCertificateArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      `/db-accessor/acm/global-certificate-arn`,
+    );
+    const globalAcmCertificate = acm.Certificate.fromCertificateArn(
+      this,
+      `${projectName}-global-domain-cert`,
+      globalCertificateArn,
+    );
+
+    // custom domain regional certificate
+    const regionalCertificateArn = ssm.StringParameter.valueForStringParameter(
+      this,
+      `/db-accessor/acm/regional-certificate-arn`,
+    );
+    const regionalAcmCertificate = acm.Certificate.fromCertificateArn(
+      this,
+      `${projectName}-regional-domain-cert`,
+      regionalCertificateArn,
+    );
+
+    const cognitoResources = createCognitoResources(this, {
+      projectName,
+      stage: props.stage,
+      domain: props.domain,
+      removalPolicy,
+      lambdaLogRetention,
+      acmCertificate: globalAcmCertificate,
+      samlMetadataFileContent: props.samlMetadataFileContent,
+    });
+    const { userPool, userPoolClient, userPoolDomain, samlProvider } = cognitoResources;
 
     const auditTable = new dynamodb.Table(this, `${projectName}-audit-logs`, {
       tableName: `${projectName}-audit-logs`,
@@ -187,11 +222,11 @@ export class DbAccessorStack extends cdk.Stack {
 
     const sharedVars = {
       GRANTS_TABLE_NAME: grantTable.tableName,
-      COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
-      COGNITO_CLIENT_ID: props.cognitoClientId,
+      COGNITO_USER_POOL_ID: userPool.userPoolId,
+      COGNITO_CLIENT_ID: userPoolClient.userPoolClientId,
       USERNAME_PREFIX: `${props.projectName}_`,
     };
-    const requestStatusEmailSource = 'noreply@4eyesdb.com';
+    const requestStatusEmailSource = `noreply@${props.domain}`;
     const requestStatusEmailVars = {
       REQUEST_STATUS_EMAIL_SOURCE: requestStatusEmailSource,
     };
@@ -275,16 +310,24 @@ export class DbAccessorStack extends cdk.Stack {
       },
     });
 
-    new apigwv2.WebSocketStage(this, `${projectName}-websocket-stage`, {
+    const websocketStage = new apigwv2.WebSocketStage(this, `${projectName}-websocket-stage`, {
       webSocketApi: websocketApi,
       stageName: props.stage,
       autoDeploy: true,
     });
 
-    const websocketEndpoint = cdk.Fn.sub('https://${ApiId}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${Stage}', {
-      ApiId: websocketApi.apiId,
-      Stage: props.stage,
+    const websocketDomainName = `${props.stage}-ws.${props.domain}`;
+    const websocketDomain = new apigwv2.DomainName(this, `${projectName}-websocket-domain`, {
+      domainName: websocketDomainName,
+      certificate: regionalAcmCertificate,
     });
+    new apigwv2.ApiMapping(this, `${projectName}-websocket-domain-mapping`, {
+      api: websocketApi,
+      domainName: websocketDomain,
+      stage: websocketStage,
+    });
+
+    const websocketEndpoint = `https://${websocketDomainName}`;
 
     const requestStatusEmailWorkerFn = createStackLambda({
       fnName: 'request-status-email-worker',
@@ -298,7 +341,7 @@ export class DbAccessorStack extends cdk.Stack {
     requestStatusEmailWorkerFn.addToRolePolicy(
       createRequestStatusEmailPolicyStatement(stack, requestStatusEmailSource),
     );
-    requestStatusEmailWorkerFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, props.cognitoUserPoolId));
+    requestStatusEmailWorkerFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, userPool.userPoolId));
     requestStatusEmailWorkerFn.addEventSource(
       new lambdaEventSources.SqsEventSource(requestStatusEmailQueue, {
         batchSize: 5,
@@ -466,8 +509,13 @@ export class DbAccessorStack extends cdk.Stack {
     });
     rulesetTable.grantReadData(adminGetRulesetFn);
 
-    const api = new apigw.RestApi(this, 'ServerlessRestApi', {
+    const apiDomainName = `${props.stage}-api.${props.domain}`;
+    const api = new apigw.RestApi(this, `${projectName}-rest-api`, {
       deployOptions: { stageName: props.stage },
+      domainName: {
+        certificate: globalAcmCertificate,
+        domainName: apiDomainName,
+      },
     });
     api.addToResourcePolicy(
       new iam.PolicyStatement({
@@ -554,11 +602,9 @@ export class DbAccessorStack extends cdk.Stack {
       allowMethods: ['OPTIONS', 'GET'],
     });
 
-    // Import the Cognito User Pool using the ID from shared vars
-    const importedUserPool = cognito.UserPool.fromUserPoolId(this, 'ImportedUserPool', sharedVars.COGNITO_USER_POOL_ID);
     // Create a Cognito authorizer for API Gateway
     const cognitoAuthorizer = new apigw.CognitoUserPoolsAuthorizer(this, 'CognitoAuthorizer', {
-      cognitoUserPools: [importedUserPool],
+      cognitoUserPools: [userPool],
       authorizerName: `${projectName}-cognito-authorizer`,
       identitySource: 'method.request.header.Authorization',
     });
@@ -630,57 +676,45 @@ export class DbAccessorStack extends cdk.Stack {
       authorizationScopes: ['openid'],
     });
 
-    const preTokenGenerationRole = new iam.Role(this, `${projectName}-pre-token-generation-role`, {
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Execution role for Cognito pre-token-generation Lambda without CloudWatch Logs permissions',
-    });
-    const preTokenGenerationFn = createStackLambda({
-      fnName: 'pre-token-generation',
-      createLogGroup: false,
-      role: preTokenGenerationRole,
-    });
-    const userPoolArn = Stack.of(this).formatArn({
-      service: 'cognito-idp',
-      resource: 'userpool',
-      resourceName: props.cognitoUserPoolId,
-    });
-
-    const preTokenGenerationPermission = new lambda.CfnPermission(
-      this,
-      `${projectName}-pre-token-generation-permission`,
-      {
-        action: 'lambda:InvokeFunction',
-        functionName: preTokenGenerationFn.functionArn,
-        principal: 'cognito-idp.amazonaws.com',
-        sourceArn: userPoolArn,
-      },
-    );
-
-    const configureUserPoolTriggerFn = createStackLambda({
-      fnName: 'configure-user-pool-trigger',
-      timeout: cdk.Duration.seconds(30),
-    });
-    configureUserPoolTriggerFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ['cognito-idp:DescribeUserPool', 'cognito-idp:UpdateUserPool'],
-        resources: [userPoolArn],
-      }),
-    );
-
-    const userPoolLambdaConfig = new cdk.CustomResource(this, 'UpdateUserPoolLambdaConfig', {
-      serviceToken: configureUserPoolTriggerFn.functionArn,
-      properties: {
-        UserPoolId: props.cognitoUserPoolId,
-        LambdaArn: preTokenGenerationFn.functionArn,
-        LambdaVersion: 'V3_0',
-      },
-    });
-    userPoolLambdaConfig.node.addDependency(preTokenGenerationPermission);
-
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url ?? '' });
-    new cdk.CfnOutput(this, 'WebSocketUrl', {
-      value: `wss://${websocketApi.apiId}.execute-api.${stack.region}.${stack.urlSuffix}/${props.stage}`,
+    new cdk.CfnOutput(this, 'ApiDomainName', {
+      value: apiDomainName,
     });
+    new cdk.CfnOutput(this, 'ApiDomainAliasDomainName', {
+      value: api.domainName!.domainNameAliasDomainName,
+    });
+    new cdk.CfnOutput(this, 'ApiDomainAliasHostedZoneId', {
+      value: api.domainName!.domainNameAliasHostedZoneId,
+    });
+    new cdk.CfnOutput(this, 'WebSocketUrl', {
+      value: `wss://${websocketDomainName}`,
+    });
+    new cdk.CfnOutput(this, 'WebSocketDomainRegionalDomainName', {
+      value: websocketDomain.regionalDomainName,
+    });
+    new cdk.CfnOutput(this, 'WebSocketDomainRegionalHostedZoneId', {
+      value: websocketDomain.regionalHostedZoneId,
+    });
+    new cdk.CfnOutput(this, 'CognitoUserPoolId', { value: userPool.userPoolId });
+    new cdk.CfnOutput(this, 'CognitoUserPoolClientId', { value: userPoolClient.userPoolClientId });
+    new cdk.CfnOutput(this, 'CognitoAuthority', {
+      value: `https://cognito-idp.${stack.region}.${stack.urlSuffix}/${userPool.userPoolId}`,
+    });
+    new cdk.CfnOutput(this, 'CognitoHostedUiDomain', {
+      value: `https://${userPoolDomain.domainName}`,
+    });
+    new cdk.CfnOutput(this, 'CognitoDomainCloudFrontEndpoint', {
+      value: userPoolDomain.cloudFrontEndpoint,
+    });
+    new cdk.CfnOutput(this, 'CognitoDomainCloudFrontHostedZoneId', {
+      value: 'Z2FDTNDATAQYW2',
+    });
+
+    if (samlProvider) {
+      new cdk.CfnOutput(this, 'CognitoSamlIdentityProviderName', {
+        value: samlProvider.providerName,
+      });
+    }
   }
 }
 

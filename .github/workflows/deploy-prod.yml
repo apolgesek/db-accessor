@@ -69,9 +69,9 @@ jobs:
           echo "## Production deployment candidate" >> "$GITHUB_STEP_SUMMARY"
           echo "- Release tag: ${{ steps.version.outputs.release_tag }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: ${{ steps.version.outputs.commit_sha }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Environment: prd" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: prod" >> "$GITHUB_STEP_SUMMARY"
 
-  deploy-prd:
+  deploy-prod:
     needs: [prepare-release]
     runs-on: ubuntu-latest
     environment: prod
@@ -129,7 +129,7 @@ jobs:
             echo
             echo "- Release tag: ${RELEASE_TAG}"
             echo "- Commit: ${RELEASE_COMMIT_SHA}"
-            echo "- Environment: prd"
+            echo "- Environment: prod"
             echo
             echo "## CDK outputs"
             echo
