@@ -84,7 +84,7 @@ jobs:
       - name: Deploy CDK stack
         working-directory: infra
         run: |
-          npx cdk deploy DbAccessorStack --require-approval never --verbose
+          npx cdk deploy db-accessor-stack --require-approval never --verbose
 
       - name: Add info to job summary
         working-directory: infra
@@ -166,7 +166,7 @@ jobs:
           echo "- Environment: dev" >> "$GITHUB_STEP_SUMMARY"
 
   tag-release:
-    needs: [plan-tag]
+    needs: [changes, plan-tag]
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     outputs:

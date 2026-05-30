@@ -93,15 +93,16 @@ export class DbAccessorStack extends cdk.Stack {
     const restApi = createRestApi(this, {
       projectName,
       stage: props.stage,
-      domain: props.domain,
-      regionalAcmCertificate: certificates.regionalAcmCertificate,
       userPool: cognitoResources.userPool,
       lambdas,
     });
 
     createStackOutputs(this, {
+      projectName,
+      stage: props.stage,
       api: restApi.api,
-      apiDomainName: restApi.apiDomainName,
+      apiOriginDomainName: restApi.apiOriginDomainName,
+      apiOriginPath: restApi.apiOriginPath,
       websocketDomain: websocket.websocketDomain,
       websocketDomainName: websocket.websocketDomainName,
       userPool: cognitoResources.userPool,

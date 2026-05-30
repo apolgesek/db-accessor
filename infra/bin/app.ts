@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as cdk from 'aws-cdk-lib';
-import { DbAccessorDeployAccessStack } from '../lib/deploy-access-stack';
+import { DbAccessorDeployStack } from '../lib/deploy-stack';
 import { DbAccessorStack } from '../lib/stack';
 
 const app = new cdk.App();
@@ -20,7 +20,7 @@ const domain = `${stage}.4eyesdb.com`;
 const samlMetadataFilePath = path.join('config', stage, 'idp', 'saml-metadata.xml');
 const samlMetadataFileContent = fs.readFileSync(path.resolve(samlMetadataFilePath), 'utf8');
 
-new DbAccessorDeployAccessStack(app, 'DbAccessorDeployAccessStack', {
+new DbAccessorDeployStack(app, `${projectName}-deploy-stack`, {
   env,
   stage,
   projectName,
@@ -28,7 +28,7 @@ new DbAccessorDeployAccessStack(app, 'DbAccessorDeployAccessStack', {
   githubRepo,
 });
 
-new DbAccessorStack(app, 'DbAccessorStack', {
+new DbAccessorStack(app, `${projectName}-stack`, {
   projectName,
   env,
   stage,
