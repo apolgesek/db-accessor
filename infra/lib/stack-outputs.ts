@@ -22,6 +22,8 @@ export interface CreateStackOutputsOptions {
 export function createStackOutputs(scope: Construct, options: CreateStackOutputsOptions): void {
   const stack = cdk.Stack.of(scope);
   const paramPrefix = `/${options.projectName}`;
+  const cognitoAuthority = `https://cognito-idp.${stack.region}.${stack.urlSuffix}/${options.userPool.userPoolId}`;
+  const cognitoHostedUiDomain = `https://${options.userPoolDomain.domainName}`;
 
   new cdk.CfnOutput(scope, 'ApiUrl', { value: options.api.url ?? '' });
   new cdk.CfnOutput(scope, 'ApiOriginDomainName', {
@@ -42,10 +44,10 @@ export function createStackOutputs(scope: Construct, options: CreateStackOutputs
   new cdk.CfnOutput(scope, 'CognitoUserPoolId', { value: options.userPool.userPoolId });
   new cdk.CfnOutput(scope, 'CognitoUserPoolClientId', { value: options.userPoolClient.userPoolClientId });
   new cdk.CfnOutput(scope, 'CognitoAuthority', {
-    value: `https://cognito-idp.${stack.region}.${stack.urlSuffix}/${options.userPool.userPoolId}`,
+    value: cognitoAuthority,
   });
   new cdk.CfnOutput(scope, 'CognitoHostedUiDomain', {
-    value: `https://${options.userPoolDomain.domainName}`,
+    value: cognitoHostedUiDomain,
   });
   new cdk.CfnOutput(scope, 'CognitoDomainCloudFrontEndpoint', {
     value: options.userPoolDomain.cloudFrontEndpoint,
@@ -77,6 +79,18 @@ export function createStackOutputs(scope: Construct, options: CreateStackOutputs
   new ssm.StringParameter(scope, 'AuthCloudFrontHostedZoneIdParameter', {
     parameterName: `${paramPrefix}/auth/cloudfront-hosted-zone-id`,
     stringValue: 'Z2FDTNDATAQYW2',
+  });
+  new ssm.StringParameter(scope, 'AuthAuthorityParameter', {
+    parameterName: `${paramPrefix}/auth/authority`,
+    stringValue: cognitoAuthority,
+  });
+  new ssm.StringParameter(scope, 'AuthClientIdParameter', {
+    parameterName: `${paramPrefix}/auth/client-id`,
+    stringValue: options.userPoolClient.userPoolClientId,
+  });
+  new ssm.StringParameter(scope, 'AuthHostedUiDomainParameter', {
+    parameterName: `${paramPrefix}/auth/hosted-ui-domain`,
+    stringValue: cognitoHostedUiDomain,
   });
 
   if (options.samlProvider) {
