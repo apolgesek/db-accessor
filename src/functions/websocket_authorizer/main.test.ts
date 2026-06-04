@@ -17,6 +17,7 @@ describe('websocket authorizer', () => {
     warnSpy = jest.spyOn(console, 'warn').mockImplementation();
     process.env.COGNITO_USER_POOL_ID = 'eu-central-1_pool';
     process.env.COGNITO_CLIENT_ID = 'client-id';
+    process.env.USERNAME_PREFIX = 'external-idp_';
     mockVerify.mockReset();
   });
 
@@ -27,7 +28,7 @@ describe('websocket authorizer', () => {
   test('allows a valid Cognito JWT from the token query parameter', async () => {
     mockVerify.mockResolvedValue({
       sub: 'sub-1',
-      username: 'db-accessor_user-1',
+      username: 'external-idp_user-1',
       'cognito:groups': ['USER'],
     });
 

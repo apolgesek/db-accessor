@@ -53,7 +53,7 @@ npm run synth
   - `GSI_PENDING_PK=PENDING`
   - `GSI_ALL_PK=REQBUCKET#YYYY-MM`
 - Auth conventions:
-  - Username comes from `claims.username` after removing `db-accessor_`.
+  - Username comes from `claims.username` after removing the configured `USERNAME_PREFIX`.
   - Admin check reads `claims['cognito:groups']` and requires `ADMIN`.
 - TypeScript convention:
   - `interface` for behavior/contracts implemented by classes.

@@ -42,12 +42,13 @@ export class DbAccessorStack extends cdk.Stack {
     const tables = createDynamoDbTables(this, { projectName, removalPolicy });
     const messaging = createMessagingResources(this, projectName);
     const issueTrackingSecret = importIssueTrackingSecret(this, projectName, props.projectName, props.stage);
+    const usernamePrefix = cognitoResources.samlProvider ? `${cognitoResources.samlProvider.providerName}_` : '';
 
     const sharedEnvironment = {
       GRANTS_TABLE_NAME: tables.grantTable.tableName,
       COGNITO_USER_POOL_ID: cognitoResources.userPool.userPoolId,
       COGNITO_CLIENT_ID: cognitoResources.userPoolClient.userPoolClientId,
-      USERNAME_PREFIX: `${props.projectName}_`,
+      USERNAME_PREFIX: usernamePrefix,
     };
     const requestStatusEmailSource = `noreply@${props.domain}`;
     const lambdaDefaults = {
