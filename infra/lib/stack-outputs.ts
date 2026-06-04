@@ -97,5 +97,9 @@ export function createStackOutputs(scope: Construct, options: CreateStackOutputs
     new cdk.CfnOutput(scope, 'CognitoSamlIdentityProviderName', {
       value: options.samlProvider.providerName,
     });
+    new ssm.StringParameter(scope, 'AuthIdentityProviderNameParameter', {
+      parameterName: `${paramPrefix}/auth/identity-provider-name`,
+      stringValue: options.samlProvider.providerName,
+    });
   }
 }

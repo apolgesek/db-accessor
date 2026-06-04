@@ -1,7 +1,10 @@
-const DEFAULT_USERNAME_PREFIX = 'db-accessor_';
-
 export function getUsernamePrefix(): string {
-  return process.env.USERNAME_PREFIX ?? DEFAULT_USERNAME_PREFIX;
+  const usernamePrefix = process.env.USERNAME_PREFIX;
+  if (usernamePrefix === undefined) {
+    throw new Error('USERNAME_PREFIX environment variable is required');
+  }
+
+  return usernamePrefix;
 }
 
 export function toAppUsername(cognitoUsername: string, usernamePrefix = getUsernamePrefix()): string {

@@ -9,7 +9,7 @@ describe('CognitoRequesterEmailProvider', () => {
     const provider = new CognitoRequesterEmailProvider(
       { send } as unknown as CognitoIdentityProviderClient,
       'user-pool-1',
-      'db-accessor_',
+      'external-idp_',
     );
 
     await expect(provider.getEmail('user-1')).resolves.toBe('requester@example.com');
@@ -17,7 +17,7 @@ describe('CognitoRequesterEmailProvider', () => {
     const command = send.mock.calls[0][0] as AdminGetUserCommand;
     expect(command.input).toEqual({
       UserPoolId: 'user-pool-1',
-      Username: 'db-accessor_user-1',
+      Username: 'external-idp_user-1',
     });
   });
 
@@ -28,12 +28,12 @@ describe('CognitoRequesterEmailProvider', () => {
     const provider = new CognitoRequesterEmailProvider(
       { send } as unknown as CognitoIdentityProviderClient,
       'user-pool-1',
-      'db-accessor_',
+      'external-idp_',
     );
 
-    await provider.getEmail('db-accessor_user-1');
+    await provider.getEmail('external-idp_user-1');
 
     const command = send.mock.calls[0][0] as AdminGetUserCommand;
-    expect(command.input.Username).toBe('db-accessor_user-1');
+    expect(command.input.Username).toBe('external-idp_user-1');
   });
 });
