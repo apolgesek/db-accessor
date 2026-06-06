@@ -49,6 +49,7 @@ export interface CreateApplicationLambdaFunctionsOptions extends LambdaFactoryDe
   stage: string;
   baseProjectName: string;
   requestStatusEmailSource: string;
+  requestStatusEmailIdentityArn: string;
   sharedEnvironment: Record<string, string>;
   tables: DynamoDbTables;
   messaging: MessagingResources;
@@ -148,7 +149,7 @@ export function createApplicationLambdaFunctions(
   });
   messaging.requestStatusEmailQueue.grantConsumeMessages(requestStatusEmailWorkerFn);
   requestStatusEmailWorkerFn.addToRolePolicy(
-    createRequestStatusEmailPolicyStatement(stack, options.requestStatusEmailSource),
+    createRequestStatusEmailPolicyStatement(options.requestStatusEmailSource, options.requestStatusEmailIdentityArn),
   );
   requestStatusEmailWorkerFn.addToRolePolicy(createRequesterEmailPolicyStatement(stack, options.userPool.userPoolId));
   requestStatusEmailWorkerFn.addEventSource(

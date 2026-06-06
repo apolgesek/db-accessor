@@ -1,13 +1,10 @@
-import { Stack } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 
-export function createRequestStatusEmailPolicyStatement(stack: Stack, sourceEmail: string) {
-  void stack;
-
+export function createRequestStatusEmailPolicyStatement(sourceEmail: string, emailIdentityArn: string) {
   return new iam.PolicyStatement({
     effect: iam.Effect.ALLOW,
     actions: ['ses:SendEmail'],
-    resources: ['*'],
+    resources: [emailIdentityArn],
     conditions: {
       StringEquals: {
         'ses:FromAddress': sourceEmail,
