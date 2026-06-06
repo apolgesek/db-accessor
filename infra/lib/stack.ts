@@ -10,6 +10,7 @@ import {
   createRequestStatusNotificationWorker,
 } from './lambda-functions';
 import { createMessagingResources } from './messaging';
+import { createRequestStatusEmailResources } from './request-status-email';
 import { createRestApi } from './rest-api';
 import { importIssueTrackingSecret } from './secrets';
 import { createStackOutputs } from './stack-outputs';
@@ -19,6 +20,7 @@ export interface DbAccessorStackProps extends cdk.StackProps {
   projectName: string;
   stage: 'dev' | 'prod';
   domain: string;
+  hostedZoneName: string;
   samlMetadataFileContent?: string;
 }
 
@@ -41,6 +43,12 @@ export class DbAccessorStack extends cdk.Stack {
     });
     const tables = createDynamoDbTables(this, { projectName, removalPolicy });
     const messaging = createMessagingResources(this, projectName);
+    const requestStatusEmail = createRequestStatusEmailResources(this, {
+      projectName,
+      domain: props.domain,
+      hostedZoneName: props.hostedZoneName,
+      removalPolicy,
+    });
     const issueTrackingSecret = importIssueTrackingSecret(this, projectName, props.projectName, props.stage);
     const usernamePrefix = cognitoResources.samlProvider ? `${cognitoResources.samlProvider.providerName}_` : '';
 
@@ -50,7 +58,6 @@ export class DbAccessorStack extends cdk.Stack {
       COGNITO_CLIENT_ID: cognitoResources.userPoolClient.userPoolClientId,
       USERNAME_PREFIX: usernamePrefix,
     };
-    const requestStatusEmailSource = `noreply@${props.domain}`;
     const lambdaDefaults = {
       projectName,
       removalPolicy,
@@ -61,7 +68,8 @@ export class DbAccessorStack extends cdk.Stack {
       ...lambdaDefaults,
       stage: props.stage,
       baseProjectName: props.projectName,
-      requestStatusEmailSource,
+      requestStatusEmailSource: requestStatusEmail.sourceEmail,
+      requestStatusEmailIdentityArn: requestStatusEmail.emailIdentityArn,
       sharedEnvironment,
       tables,
       messaging,
