@@ -34,11 +34,14 @@ export interface ApplicationLambdaFunctions {
   getRequestFn: lambda.IFunction;
   getNotificationsFn: lambda.IFunction;
   markNotificationsReadFn: lambda.IFunction;
+  getConfiguredTablesFn: lambda.IFunction;
   adminGetRequestFn: lambda.IFunction;
   adminApproveRequestFn: lambda.IFunction;
   adminRejectRequestFn: lambda.IFunction;
   adminCreateRulesetFn: lambda.IFunction;
   adminGetRulesetFn: lambda.IFunction;
+  adminCreateConfiguredTableFn: lambda.IFunction;
+  adminDeleteConfiguredTableFn: lambda.IFunction;
 }
 
 export interface DbAccessorLambdaFunctions extends ApplicationLambdaFunctions {
@@ -207,7 +210,10 @@ export function createApplicationLambdaFunctions(
 
   const createRequestFn = createConfiguredLambda(scope, options, {
     fnName: 'create-request',
-    environment: sharedEnvironment,
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      ...sharedEnvironment,
+    },
   });
   createRequestFn.addToRolePolicy(
     new iam.PolicyStatement({
@@ -217,6 +223,7 @@ export function createApplicationLambdaFunctions(
     }),
   );
   tables.grantTable.grantWriteData(createRequestFn);
+  tables.configuredTablesTable.grantReadData(createRequestFn);
 
   const createUnredactRequestFn = createConfiguredLambda(scope, options, {
     fnName: 'create-unredact-request',
@@ -247,6 +254,15 @@ export function createApplicationLambdaFunctions(
     },
   });
   tables.notificationTable.grantReadWriteData(markNotificationsReadFn);
+
+  const getConfiguredTablesFn = createConfiguredLambda(scope, options, {
+    fnName: 'get-configured-tables',
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      ...sharedEnvironment,
+    },
+  });
+  tables.configuredTablesTable.grantReadData(getConfiguredTablesFn);
 
   const adminGetRequestFn = createConfiguredLambda(scope, options, {
     fnName: 'admin-get-request',
@@ -301,6 +317,31 @@ export function createApplicationLambdaFunctions(
   });
   tables.rulesetTable.grantReadData(adminGetRulesetFn);
 
+  const adminCreateConfiguredTableFn = createConfiguredLambda(scope, options, {
+    fnName: 'admin-create-configured-table',
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      ...sharedEnvironment,
+    },
+  });
+  adminCreateConfiguredTableFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['sts:AssumeRole'],
+      resources: assumeRoleArns,
+    }),
+  );
+  tables.configuredTablesTable.grantWriteData(adminCreateConfiguredTableFn);
+
+  const adminDeleteConfiguredTableFn = createConfiguredLambda(scope, options, {
+    fnName: 'admin-delete-configured-table',
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      ...sharedEnvironment,
+    },
+  });
+  tables.configuredTablesTable.grantWriteData(adminDeleteConfiguredTableFn);
+
   return {
     getRecordFn,
     issueTrackingAuditWorkerFn,
@@ -315,11 +356,14 @@ export function createApplicationLambdaFunctions(
     getRequestFn,
     getNotificationsFn,
     markNotificationsReadFn,
+    getConfiguredTablesFn,
     adminGetRequestFn,
     adminApproveRequestFn,
     adminRejectRequestFn,
     adminCreateRulesetFn,
     adminGetRulesetFn,
+    adminCreateConfiguredTableFn,
+    adminDeleteConfiguredTableFn,
   };
 }
 

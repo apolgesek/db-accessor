@@ -4,20 +4,15 @@ import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { monthsBetween } from './months-between.util';
 import { requestSchema } from './request-schema';
+import { isAdmin } from '../../shared/auth';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const rawGroups = claims?.['cognito:groups'];
-    const groups: string[] = Array.isArray(rawGroups)
-      ? rawGroups
-      : typeof rawGroups === 'string'
-      ? rawGroups.split(',')
-      : [];
 
-    if (!groups.includes('ADMIN')) {
+    if (!isAdmin(claims)) {
       return APIResponse.error(401, 'Unauthorized');
     }
 

@@ -10,6 +10,7 @@ import {
   SnsRequestStatusEventPublisher,
 } from '../../shared/request-status-event-publisher';
 import { SNSClient } from '@aws-sdk/client-sns';
+import { isAdmin } from '../../shared/auth';
 
 class LambdaHandler {
   constructor(
@@ -19,14 +20,8 @@ class LambdaHandler {
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const rawGroups = claims?.['cognito:groups'];
-    const groups: string[] = Array.isArray(rawGroups)
-      ? rawGroups
-      : typeof rawGroups === 'string'
-      ? rawGroups.split(',')
-      : [];
 
-    if (!groups.includes('ADMIN')) {
+    if (!isAdmin(claims)) {
       return APIResponse.error(401, 'Unauthorized');
     }
 

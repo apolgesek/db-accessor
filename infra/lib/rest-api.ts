@@ -81,6 +81,12 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
     allowMethods: ['OPTIONS', 'GET'],
   });
 
+  const configuredTables = api.root.addResource('configured-tables');
+  configuredTables.addCorsPreflight({
+    allowOrigins: apigw.Cors.ALL_ORIGINS,
+    allowMethods: ['OPTIONS', 'GET'],
+  });
+
   const notifications = api.root.addResource('notifications');
   notifications.addCorsPreflight({
     allowOrigins: apigw.Cors.ALL_ORIGINS,
@@ -102,6 +108,12 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
   adminGetRuleset.addCorsPreflight({
     allowOrigins: apigw.Cors.ALL_ORIGINS,
     allowMethods: ['OPTIONS', 'GET'],
+  });
+
+  const adminConfiguredTables = adminResource.addResource('configured-tables');
+  adminConfiguredTables.addCorsPreflight({
+    allowOrigins: apigw.Cors.ALL_ORIGINS,
+    allowMethods: ['OPTIONS', 'POST', 'DELETE'],
   });
 
   const cognitoAuthorizer = new apigw.CognitoUserPoolsAuthorizer(scope, 'CognitoAuthorizer', {
@@ -133,6 +145,7 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
   adminRejectRequest.addMethod('PUT', new apigw.LambdaIntegration(options.lambdas.adminRejectRequestFn), methodOptions);
   getAccounts.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.getAccountsFn), methodOptions);
   getTables.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.getTablesFn), methodOptions);
+  configuredTables.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.getConfiguredTablesFn), methodOptions);
   notifications.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.getNotificationsFn), methodOptions);
   readNotifications.addMethod(
     'POST',
@@ -145,6 +158,16 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
     methodOptions,
   );
   adminGetRuleset.addMethod('GET', new apigw.LambdaIntegration(options.lambdas.adminGetRulesetFn), methodOptions);
+  adminConfiguredTables.addMethod(
+    'POST',
+    new apigw.LambdaIntegration(options.lambdas.adminCreateConfiguredTableFn),
+    methodOptions,
+  );
+  adminConfiguredTables.addMethod(
+    'DELETE',
+    new apigw.LambdaIntegration(options.lambdas.adminDeleteConfiguredTableFn),
+    methodOptions,
+  );
 
   return {
     api,

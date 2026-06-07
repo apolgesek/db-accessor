@@ -23,20 +23,15 @@ import {
 } from '../../shared/ruleset';
 import { requestSchema } from './request-schema';
 import { getTimeBucket } from '../../shared/time.util';
+import { isAdmin } from '../../shared/auth';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-    const rawGroups = claims['cognito:groups'];
-    const groups: string[] = Array.isArray(rawGroups)
-      ? rawGroups
-      : typeof rawGroups === 'string'
-      ? rawGroups.split(',')
-      : [];
 
-    if (!groups.includes('ADMIN')) {
+    if (!isAdmin(claims)) {
       return APIResponse.error(401, 'Unauthorized');
     }
 

@@ -5,6 +5,7 @@ import {
 } from 'aws-lambda';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { toAppUsername } from '../../shared/username';
+import { getGroups } from '../../shared/auth';
 
 type AuthorizerEvent = APIGatewayRequestAuthorizerEvent | APIGatewayRequestAuthorizerEventV2;
 
@@ -37,7 +38,7 @@ class LambdaHandler {
         context: {
           username,
           sub: claims.sub,
-          groups: normalizeGroups(claims['cognito:groups']).join(','),
+          groups: getGroups(claims).join(','),
         },
       };
     } catch (error) {
@@ -86,10 +87,6 @@ function getQueryStringParameter(event: AuthorizerEvent, name: string): string |
   const params = event.queryStringParameters ?? {};
   const key = Object.keys(params).find((paramName) => paramName.toLowerCase() === name.toLowerCase());
   return key ? params[key] : undefined;
-}
-
-function normalizeGroups(groups: string[] | undefined): string[] {
-  return groups ?? [];
 }
 
 function getRequiredEnv(name: string): string {

@@ -6,6 +6,7 @@ export interface DynamoDbTables {
   auditTable: dynamodb.Table;
   grantTable: dynamodb.Table;
   rulesetTable: dynamodb.Table;
+  configuredTablesTable: dynamodb.Table;
   notificationTable: dynamodb.Table;
   websocketConnectionTable: dynamodb.Table;
 }
@@ -62,6 +63,29 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     sortKey: { name: 'gsiAccountRegionTableSk', type: dynamodb.AttributeType.STRING },
   });
 
+  const configuredTablesTable = new dynamodb.Table(scope, `${projectName}-configured-tables`, {
+    tableName: `${projectName}-configured-tables`,
+    partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    removalPolicy,
+  });
+  configuredTablesTable.addGlobalSecondaryIndex({
+    indexName: 'gsiAll',
+    partitionKey: { name: 'gsiAllPk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'gsiAllSk', type: dynamodb.AttributeType.STRING },
+  });
+  configuredTablesTable.addGlobalSecondaryIndex({
+    indexName: 'gsiAccount',
+    partitionKey: { name: 'gsiAccountPk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'gsiAccountSk', type: dynamodb.AttributeType.STRING },
+  });
+  configuredTablesTable.addGlobalSecondaryIndex({
+    indexName: 'gsiAccountRegion',
+    partitionKey: { name: 'gsiAccountRegionPk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'gsiAccountRegionSk', type: dynamodb.AttributeType.STRING },
+  });
+
   const notificationTable = new dynamodb.Table(scope, `${projectName}-notifications`, {
     tableName: `${projectName}-notifications`,
     partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
@@ -91,6 +115,7 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     auditTable,
     grantTable,
     rulesetTable,
+    configuredTablesTable,
     notificationTable,
     websocketConnectionTable,
   };

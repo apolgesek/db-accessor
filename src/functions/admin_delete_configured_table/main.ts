@@ -1,17 +1,16 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DeleteCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { APIResponse } from '../../shared/response';
-import { ACTIVE_RULESET_SK, ActiveRulesetSnapshot, getRulesetSnapshotPk } from '../../shared/ruleset';
-import { requestSchema } from './request-schema';
 import { isAdmin } from '../../shared/auth';
+import { CONFIGURED_TABLE_SK, getConfiguredTablePk } from '../../shared/configured-table';
+import { APIResponse } from '../../shared/response';
+import { requestSchema } from './request-schema';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
   async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
-
     if (!isAdmin(claims)) {
       return APIResponse.error(401, 'Unauthorized');
     }
@@ -24,27 +23,31 @@ class LambdaHandler {
     }
 
     const { accountId, region, table } = result.value;
-
     const docClient = DynamoDBDocumentClient.from(this.ddbClient);
-    const res = await docClient.send(
-      new GetCommand({
-        TableName: process.env.RULESET_TABLE_NAME,
-        Key: {
-          pk: getRulesetSnapshotPk(accountId, region, table),
-          sk: ACTIVE_RULESET_SK,
-        },
-      }),
-    );
 
-    const snapshot = res.Item as ActiveRulesetSnapshot | undefined;
+    try {
+      await docClient.send(
+        new DeleteCommand({
+          TableName: process.env.CONFIGURED_TABLES_TABLE_NAME,
+          Key: {
+            pk: getConfiguredTablePk(accountId, region, table),
+            sk: CONFIGURED_TABLE_SK,
+          },
+          ConditionExpression: 'attribute_exists(pk)',
+        }),
+      );
+    } catch (err) {
+      if (
+        err instanceof ConditionalCheckFailedException ||
+        (err as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return APIResponse.error(404, 'Configured table not found');
+      }
 
-    return APIResponse.success(200, {
-      accountId,
-      region,
-      table,
-      updatedAt: snapshot?.updatedAt ?? null,
-      activeRulesets: snapshot?.activeRulesets ?? {},
-    });
+      throw err;
+    }
+
+    return APIResponse.success(200, { deleted: true });
   }
 }
 

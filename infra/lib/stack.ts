@@ -10,7 +10,7 @@ import {
   createRequestStatusNotificationWorker,
 } from './lambda-functions';
 import { createMessagingResources } from './messaging';
-import { createRequestStatusEmailResources } from './request-status-email';
+import { createRequestStatusEmailResources } from './emails';
 import { createRestApi } from './rest-api';
 import { importIssueTrackingSecret } from './secrets';
 import { createStackOutputs } from './stack-outputs';
