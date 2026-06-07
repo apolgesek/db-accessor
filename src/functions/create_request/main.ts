@@ -1,11 +1,5 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import {
-  AttributeValue,
-  DescribeTableCommand,
-  DynamoDBClient,
-  GetItemCommand,
-  PutItemCommand,
-} from '@aws-sdk/client-dynamodb';
+import { AttributeValue, DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
@@ -13,6 +7,7 @@ import { requestSchema } from './request-schema';
 import { EntityRequest } from '../../shared/entity-request';
 import { getTimeBucket } from '../../shared/time.util';
 import { toAppUsername } from '../../shared/username';
+import { CONFIGURED_TABLE_SK, getConfiguredTablePk } from '../../shared/configured-table';
 
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
@@ -25,22 +20,32 @@ class LambdaHandler {
       return APIResponse.error(400, 'Invalid request');
     }
 
+    const configuredTableResponse = await this.ddbClient.send(
+      new GetItemCommand({
+        TableName: process.env.CONFIGURED_TABLES_TABLE_NAME,
+        Key: {
+          pk: { S: getConfiguredTablePk(result.value.accountId, result.value.region, result.value.table) },
+          sk: { S: CONFIGURED_TABLE_SK },
+        },
+      }),
+    );
+
+    if (!configuredTableResponse.Item) {
+      return APIResponse.error(400, 'Table is not configured');
+    }
+
+    const PK_NAME = configuredTableResponse.Item.pkName?.S;
+    const SK_NAME = configuredTableResponse.Item.skName?.S;
+
+    if (!PK_NAME || (SK_NAME && !result.value.targetSk)) {
+      return APIResponse.error(400, 'Invalid request');
+    }
+
     const creds = await getStsSession(result.value.accountId, result.value.region);
     const targetDbClient = new DynamoDBClient({
       region: result.value.region,
       credentials: creds,
     });
-
-    const describeTableResponse = await targetDbClient.send(
-      new DescribeTableCommand({ TableName: result.value.table }),
-    );
-
-    if (!describeTableResponse.Table) {
-      return APIResponse.error(400, 'Invalid table');
-    }
-
-    const PK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'HASH')?.AttributeName as string;
-    const SK_NAME = describeTableResponse.Table.KeySchema?.find((k) => k.KeyType === 'RANGE')?.AttributeName as string;
 
     const key: Record<string, AttributeValue> = {
       [PK_NAME]: { S: result.value.targetPk },
