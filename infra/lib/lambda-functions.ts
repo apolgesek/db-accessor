@@ -21,6 +21,7 @@ export interface LambdaFactoryDefaults {
 }
 
 export interface ApplicationLambdaFunctions {
+  piiDetectorFn: lambda.IFunction;
   getRecordFn: lambda.IFunction;
   issueTrackingAuditWorkerFn: lambda.IFunction;
   websocketConnectFn: lambda.IFunction;
@@ -68,6 +69,13 @@ export interface CreateRequestStatusNotificationWorkerOptions extends LambdaFact
   websocketEndpoint: string;
 }
 
+export function createPiiDetectorLambda(scope: Construct, options: LambdaFactoryDefaults): lambda.IFunction {
+  return createConfiguredLambda(scope, options, {
+    fnName: 'pii-detector',
+    timeout: cdk.Duration.seconds(10),
+  });
+}
+
 function createConfiguredLambda(
   scope: Construct,
   defaults: LambdaFactoryDefaults,
@@ -87,6 +95,8 @@ export function createApplicationLambdaFunctions(
 ): ApplicationLambdaFunctions {
   const stack = cdk.Stack.of(scope);
   const { projectName, sharedEnvironment, tables, messaging } = options;
+
+  const piiDetectorFn = createPiiDetectorLambda(scope, options);
 
   const getRecordFn = createConfiguredLambda(scope, options, {
     fnName: 'get-record',
@@ -343,6 +353,7 @@ export function createApplicationLambdaFunctions(
   tables.configuredTablesTable.grantWriteData(adminDeleteConfiguredTableFn);
 
   return {
+    piiDetectorFn,
     getRecordFn,
     issueTrackingAuditWorkerFn,
     websocketConnectFn,
