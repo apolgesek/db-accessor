@@ -1,9 +1,10 @@
-import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DeleteCommand, DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBClient, TransactionCanceledException } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { isAdmin } from '../../shared/auth';
 import { CONFIGURED_TABLE_SK, getConfiguredTablePk } from '../../shared/configured-table';
 import { APIResponse } from '../../shared/response';
+import { PII_SUGGESTION_STATE_SK, getPiiSuggestionPk } from '../../shared/pii-scan';
 import { requestSchema } from './request-schema';
 
 class LambdaHandler {
@@ -27,19 +28,31 @@ class LambdaHandler {
 
     try {
       await docClient.send(
-        new DeleteCommand({
-          TableName: process.env.CONFIGURED_TABLES_TABLE_NAME,
-          Key: {
-            pk: getConfiguredTablePk(accountId, region, table),
-            sk: CONFIGURED_TABLE_SK,
-          },
-          ConditionExpression: 'attribute_exists(pk)',
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Delete: {
+                TableName: process.env.CONFIGURED_TABLES_TABLE_NAME,
+                Key: { pk: getConfiguredTablePk(accountId, region, table), sk: CONFIGURED_TABLE_SK },
+                ConditionExpression: 'attribute_exists(pk)',
+              },
+            },
+            {
+              Delete: {
+                TableName: process.env.PII_SUGGESTIONS_TABLE_NAME,
+                Key: { pk: getPiiSuggestionPk(accountId, region, table), sk: PII_SUGGESTION_STATE_SK },
+              },
+            },
+          ],
         }),
       );
     } catch (err) {
       if (
-        err instanceof ConditionalCheckFailedException ||
-        (err as { name?: string }).name === 'ConditionalCheckFailedException'
+        (err instanceof TransactionCanceledException ||
+          (err as { name?: string }).name === 'TransactionCanceledException') &&
+        ((err as TransactionCanceledException).CancellationReasons ?? []).some(
+          (reason) => reason.Code === 'ConditionalCheckFailed',
+        )
       ) {
         return APIResponse.error(404, 'Configured table not found');
       }

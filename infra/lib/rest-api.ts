@@ -115,6 +115,16 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
     allowOrigins: apigw.Cors.ALL_ORIGINS,
     allowMethods: ['OPTIONS', 'POST', 'DELETE'],
   });
+  const adminPiiDetection = adminConfiguredTables.addResource('pii-detection');
+  adminPiiDetection.addCorsPreflight({
+    allowOrigins: apigw.Cors.ALL_ORIGINS,
+    allowMethods: ['OPTIONS', 'PATCH'],
+  });
+  const adminPiiSuggestions = adminConfiguredTables.addResource('pii-suggestions');
+  adminPiiSuggestions.addCorsPreflight({
+    allowOrigins: apigw.Cors.ALL_ORIGINS,
+    allowMethods: ['OPTIONS', 'GET'],
+  });
 
   const cognitoAuthorizer = new apigw.CognitoUserPoolsAuthorizer(scope, 'CognitoAuthorizer', {
     cognitoUserPools: [options.userPool],
@@ -161,6 +171,16 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
   adminConfiguredTables.addMethod(
     'POST',
     new apigw.LambdaIntegration(options.lambdas.adminCreateConfiguredTableFn),
+    methodOptions,
+  );
+  adminPiiDetection.addMethod(
+    'PATCH',
+    new apigw.LambdaIntegration(options.lambdas.adminUpdatePiiDetectionFn),
+    methodOptions,
+  );
+  adminPiiSuggestions.addMethod(
+    'GET',
+    new apigw.LambdaIntegration(options.lambdas.adminGetPiiSuggestionsFn),
     methodOptions,
   );
   adminConfiguredTables.addMethod(

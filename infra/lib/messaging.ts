@@ -9,6 +9,8 @@ export interface MessagingResources {
   requestStatusTopic: sns.Topic;
   requestStatusEmailQueue: sqs.Queue;
   requestStatusNotificationQueue: sqs.Queue;
+  piiScanQueue: sqs.Queue;
+  piiScanDlq: sqs.Queue;
 }
 
 export function createMessagingResources(scope: Construct, projectName: string): MessagingResources {
@@ -66,6 +68,20 @@ export function createMessagingResources(scope: Construct, projectName: string):
       rawMessageDelivery: true,
     }),
   );
+
+  const piiScanDlq = new sqs.Queue(scope, `${projectName}-pii-scan-dlq`, {
+    queueName: `${projectName}-pii-scan-dlq.fifo`,
+    fifo: true,
+    retentionPeriod: cdk.Duration.days(14),
+  });
+  const piiScanQueue = new sqs.Queue(scope, `${projectName}-pii-scan-queue`, {
+    queueName: `${projectName}-pii-scan-queue.fifo`,
+    fifo: true,
+    contentBasedDeduplication: false,
+    retentionPeriod: cdk.Duration.days(4),
+    visibilityTimeout: cdk.Duration.minutes(90),
+    deadLetterQueue: { queue: piiScanDlq, maxReceiveCount: 3 },
+  });
   requestStatusTopic.addSubscription(
     new snsSubscriptions.SqsSubscription(requestStatusNotificationQueue, {
       rawMessageDelivery: true,
@@ -77,5 +93,7 @@ export function createMessagingResources(scope: Construct, projectName: string):
     requestStatusTopic,
     requestStatusEmailQueue,
     requestStatusNotificationQueue,
+    piiScanQueue,
+    piiScanDlq,
   };
 }

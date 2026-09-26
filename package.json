@@ -14,6 +14,7 @@
     "@aws-sdk/client-dynamodb": "^3.1032.0",
     "@aws-sdk/client-iam": "^3.864.0",
     "@aws-sdk/client-identitystore": "^3.948.0",
+    "@aws-sdk/client-lambda": "^3.962.0",
     "@aws-sdk/client-organizations": "^3.962.0",
     "@aws-sdk/client-secrets-manager": "^3.1040.0",
     "@aws-sdk/client-sesv2": "^3.1041.0",

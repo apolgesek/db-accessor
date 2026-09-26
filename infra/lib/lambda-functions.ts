@@ -5,6 +5,9 @@ import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as eventTargets from 'aws-cdk-lib/aws-events-targets';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
@@ -22,6 +25,8 @@ export interface LambdaFactoryDefaults {
 
 export interface ApplicationLambdaFunctions {
   piiDetectorFn: lambda.IFunction;
+  piiScanDispatcherFn: lambda.IFunction;
+  piiScanWorkerFn: lambda.IFunction;
   getRecordFn: lambda.IFunction;
   issueTrackingAuditWorkerFn: lambda.IFunction;
   websocketConnectFn: lambda.IFunction;
@@ -43,6 +48,8 @@ export interface ApplicationLambdaFunctions {
   adminGetRulesetFn: lambda.IFunction;
   adminCreateConfiguredTableFn: lambda.IFunction;
   adminDeleteConfiguredTableFn: lambda.IFunction;
+  adminUpdatePiiDetectionFn: lambda.IFunction;
+  adminGetPiiSuggestionsFn: lambda.IFunction;
 }
 
 export interface DbAccessorLambdaFunctions extends ApplicationLambdaFunctions {
@@ -174,6 +181,62 @@ export function createApplicationLambdaFunctions(
 
   const managementAccountId = '058264309711';
   const assumeRoleArns = [`arn:aws:iam::${managementAccountId}:role/DbAccessorAppRole`];
+
+  const piiScanDispatcherFn = createConfiguredLambda(scope, options, {
+    fnName: 'pii-scan-dispatcher',
+    timeout: cdk.Duration.minutes(5),
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      PII_SUGGESTIONS_TABLE_NAME: tables.piiSuggestionsTable.tableName,
+      PII_SCAN_QUEUE_URL: messaging.piiScanQueue.queueUrl,
+    },
+  });
+  tables.configuredTablesTable.grantReadData(piiScanDispatcherFn);
+  tables.piiSuggestionsTable.grantWriteData(piiScanDispatcherFn);
+  messaging.piiScanQueue.grantSendMessages(piiScanDispatcherFn);
+  new events.Rule(scope, `${projectName}-daily-pii-scan`, {
+    ruleName: `${projectName}-daily-pii-scan`,
+    schedule: events.Schedule.cron({ minute: '0', hour: '2' }),
+    targets: [new eventTargets.LambdaFunction(piiScanDispatcherFn)],
+  });
+
+  const piiScanWorkerFn = createConfiguredLambda(scope, options, {
+    fnName: 'pii-scan-worker',
+    timeout: cdk.Duration.minutes(15),
+    memorySize: 1024,
+    reservedConcurrentExecutions: 5,
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      PII_SUGGESTIONS_TABLE_NAME: tables.piiSuggestionsTable.tableName,
+      PII_DETECTOR_FUNCTION_NAME: piiDetectorFn.functionName,
+    },
+  });
+  piiScanWorkerFn.addToRolePolicy(
+    new iam.PolicyStatement({ effect: iam.Effect.ALLOW, actions: ['sts:AssumeRole'], resources: assumeRoleArns }),
+  );
+  piiDetectorFn.grantInvoke(piiScanWorkerFn);
+  tables.configuredTablesTable.grantReadData(piiScanWorkerFn);
+  tables.piiSuggestionsTable.grantReadWriteData(piiScanWorkerFn);
+  messaging.piiScanQueue.grantConsumeMessages(piiScanWorkerFn);
+  piiScanWorkerFn.addEventSource(
+    new lambdaEventSources.SqsEventSource(messaging.piiScanQueue, {
+      batchSize: 1,
+      reportBatchItemFailures: true,
+      maxConcurrency: 5,
+    }),
+  );
+  new cloudwatch.Alarm(scope, `${projectName}-pii-scan-dlq-alarm`, {
+    alarmName: `${projectName}-pii-scan-dlq-visible`,
+    metric: messaging.piiScanDlq.metricApproximateNumberOfMessagesVisible(),
+    threshold: 1,
+    evaluationPeriods: 1,
+  });
+  new cloudwatch.Alarm(scope, `${projectName}-pii-scan-worker-errors-alarm`, {
+    alarmName: `${projectName}-pii-scan-worker-errors`,
+    metric: piiScanWorkerFn.metricErrors(),
+    threshold: 1,
+    evaluationPeriods: 1,
+  });
 
   getRecordFn.addToRolePolicy(
     new iam.PolicyStatement({
@@ -347,13 +410,41 @@ export function createApplicationLambdaFunctions(
     fnName: 'admin-delete-configured-table',
     environment: {
       CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      PII_SUGGESTIONS_TABLE_NAME: tables.piiSuggestionsTable.tableName,
       ...sharedEnvironment,
     },
   });
   tables.configuredTablesTable.grantWriteData(adminDeleteConfiguredTableFn);
+  tables.piiSuggestionsTable.grantWriteData(adminDeleteConfiguredTableFn);
+
+  const adminUpdatePiiDetectionFn = createConfiguredLambda(scope, options, {
+    fnName: 'admin-update-pii-detection',
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      PII_SUGGESTIONS_TABLE_NAME: tables.piiSuggestionsTable.tableName,
+      PII_SCAN_QUEUE_URL: messaging.piiScanQueue.queueUrl,
+      ...sharedEnvironment,
+    },
+  });
+  tables.configuredTablesTable.grantReadWriteData(adminUpdatePiiDetectionFn);
+  tables.piiSuggestionsTable.grantWriteData(adminUpdatePiiDetectionFn);
+  messaging.piiScanQueue.grantSendMessages(adminUpdatePiiDetectionFn);
+
+  const adminGetPiiSuggestionsFn = createConfiguredLambda(scope, options, {
+    fnName: 'admin-get-pii-suggestions',
+    environment: {
+      CONFIGURED_TABLES_TABLE_NAME: tables.configuredTablesTable.tableName,
+      PII_SUGGESTIONS_TABLE_NAME: tables.piiSuggestionsTable.tableName,
+      ...sharedEnvironment,
+    },
+  });
+  tables.configuredTablesTable.grantReadData(adminGetPiiSuggestionsFn);
+  tables.piiSuggestionsTable.grantReadData(adminGetPiiSuggestionsFn);
 
   return {
     piiDetectorFn,
+    piiScanDispatcherFn,
+    piiScanWorkerFn,
     getRecordFn,
     issueTrackingAuditWorkerFn,
     websocketConnectFn,
@@ -375,6 +466,8 @@ export function createApplicationLambdaFunctions(
     adminGetRulesetFn,
     adminCreateConfiguredTableFn,
     adminDeleteConfiguredTableFn,
+    adminUpdatePiiDetectionFn,
+    adminGetPiiSuggestionsFn,
   };
 }
 
