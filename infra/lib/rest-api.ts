@@ -118,7 +118,7 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
   const adminPiiDetection = adminConfiguredTables.addResource('pii-detection');
   adminPiiDetection.addCorsPreflight({
     allowOrigins: apigw.Cors.ALL_ORIGINS,
-    allowMethods: ['OPTIONS', 'PATCH'],
+    allowMethods: ['OPTIONS', 'PUT'],
   });
   const adminPiiSuggestions = adminConfiguredTables.addResource('pii-suggestions');
   adminPiiSuggestions.addCorsPreflight({
@@ -174,7 +174,7 @@ export function createRestApi(scope: Construct, options: CreateRestApiOptions): 
     methodOptions,
   );
   adminPiiDetection.addMethod(
-    'PATCH',
+    'PUT',
     new apigw.LambdaIntegration(options.lambdas.adminUpdatePiiDetectionFn),
     methodOptions,
   );
