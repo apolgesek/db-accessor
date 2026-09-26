@@ -7,6 +7,7 @@ export interface DynamoDbTables {
   grantTable: dynamodb.Table;
   rulesetTable: dynamodb.Table;
   configuredTablesTable: dynamodb.Table;
+  piiSuggestionsTable: dynamodb.Table;
   notificationTable: dynamodb.Table;
   websocketConnectionTable: dynamodb.Table;
 }
@@ -85,6 +86,19 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     partitionKey: { name: 'gsiAccountRegionPk', type: dynamodb.AttributeType.STRING },
     sortKey: { name: 'gsiAccountRegionSk', type: dynamodb.AttributeType.STRING },
   });
+  configuredTablesTable.addGlobalSecondaryIndex({
+    indexName: 'gsiPiiDetection',
+    partitionKey: { name: 'gsiPiiDetectionPk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'gsiPiiDetectionSk', type: dynamodb.AttributeType.STRING },
+  });
+
+  const piiSuggestionsTable = new dynamodb.Table(scope, `${projectName}-pii-suggestions`, {
+    tableName: `${projectName}-pii-suggestions`,
+    partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+    sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    removalPolicy,
+  });
 
   const notificationTable = new dynamodb.Table(scope, `${projectName}-notifications`, {
     tableName: `${projectName}-notifications`,
@@ -116,6 +130,7 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     grantTable,
     rulesetTable,
     configuredTablesTable,
+    piiSuggestionsTable,
     notificationTable,
     websocketConnectionTable,
   };

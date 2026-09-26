@@ -1,69 +1,55 @@
-# Agent Notes
+# Repository Guide
 
-Work from the repo root unless a command says otherwise.
+## Scope and navigation
 
-## Commands
+Work from the repository root unless noted. Backend services and application CDK belong here. Siblings `db-accessor-ui` and `db-accessor-infra` own the UI and shared edge/DNS/certificates/frontend hosting.
 
-App package:
+- `src/functions/<snake_case>/main.ts`: Lambda entrypoints; colocated schemas and tests.
+- `src/shared/`: contracts, key helpers, authentication, path grammar, and AWS utilities.
+- `infra/lib/`: `stack.ts` assembles resources; `lambda-functions.ts` wires Lambdas/env/IAM; `rest-api.ts` defines routes; `dynamodb-tables.ts` and `messaging.ts` define storage/queues.
+- `infra/lib/lambda-factory.ts`: maps kebab-case function names to snake_case folders and bundles `lambdaHandler` exports.
 
-```bash
-npm ci
-npm run compile
-npm run lint
-npm run test
-npm run unit
-npx jest src/shared/ruleset.test.ts
-```
+## Verification
 
-Infra package:
+Root and `infra/` have separate npm packages/lockfiles. Install dependencies with `npm ci` where needed; Lambda bundling also needs root dependencies.
 
-```bash
-cd infra
-npm ci
-npm run build
-npm run test
-npm run synth
-```
+| Check | Repository root | From `infra/` |
+| --- | --- | --- |
+| Type-check | `npm run compile` | `npm run build` |
+| Unit tests | `npm run unit` | `npm test` |
+| Focused tests | `npx jest src/functions/<folder> --runInBand` | `npx jest test/<file>.test.ts --runInBand` |
+| Lint | `npm run lint` (includes infra TypeScript) | — |
+| Synthesize | — | `npm run synth` |
 
-## Architecture
+- Root `npm test` combines compile and unit tests, excluding infra. Both TypeScript builds use `noEmit`; CDK bundles Lambdas.
+- Synth requires `STAGE=dev|prod` and `infra/config/<stage>/idp/saml-metadata.xml`. PowerShell, from `infra/`: `$env:STAGE='dev'; npm run synth`.
+- Start with affected tests; shared behavior changes need root test/lint, CDK changes also need infra build/test/synth. Documentation-only edits need diff/content checks.
 
-- Root `src/`: TypeScript Lambda handlers for request/grant, record access, rulesets, and Cognito token customization.
-- `infra/`: CDK stack for API Gateway, Cognito authorizer, Lambdas, DynamoDB tables/GSIs, and GitHub OIDC deploy role.
-- Main tables from `infra/lib/stack.ts`:
-  - `*-grants`: request lifecycle and admin approvals/rejections.
-  - `*-rulesets`: ruleset history plus active masking snapshots.
-  - `*-audit-logs`: record access audit entries.
-- Cross-account access uses STS assume-role `DbAccessorAppRole` via `src/shared/get-sts-session.ts` with credential caching and in-flight dedupe.
-- Redaction is resolved in `get_record` from active rulesets plus unredact paths. Path patterns support object wildcard `*` and array selectors `[]` / `[i]`.
-- `pre_token_generation` maps Identity Center group IDs to app roles (`ADMIN`, `USER`). Admin handlers must still enforce `ADMIN`.
+## Code conventions
 
-## Code Contracts
+- Use `LambdaHandler`, constructor injection, and `export const lambdaHandler = handlerInstance.handle.bind(handlerInstance)`.
+- HTTP handlers use colocated Joi `request-schema.ts` and shared `APIResponse.success/error`; validation failures return `400, 'Invalid request'`. Internal Lambda/SQS handlers follow their event contracts.
+- Admin handlers enforce shared `isAdmin` even with API authorization. Use shared `toAppUsername`; `USERNAME_PREFIX` must be defined (empty is valid).
+- Use `interface` for implemented behavior contracts and `type` for DTOs/value objects. Keep LF line endings and existing formatting.
 
-- Lambda handlers use:
-  - `class LambdaHandler`
-  - constructor-injected AWS clients where useful
-  - singleton export: `export const lambdaHandler = handlerInstance.handle.bind(handlerInstance)`
-- Infra Lambda names are kebab-case; source folders under `src/functions` are snake_case. `infra/lib/lambda-factory.ts` maps with `fnName.replaceAll('-', '_')`.
-- Validate inputs with colocated `request-schema.ts` Joi schemas. On validation failure return `APIResponse.error(400, 'Invalid request')`.
-- Return API Gateway responses through `src/shared/response.ts` (`APIResponse.success/error`) to keep CORS consistent.
-- Reuse key helpers in `src/shared/ruleset.ts`; do not manually rebuild ruleset keys.
-- Grants key conventions:
-  - `PK=USER#<id>`
-  - `SK=REQUEST#...`
-  - `GSI_PENDING_PK=PENDING`
-  - `GSI_ALL_PK=REQBUCKET#YYYY-MM`
-- Auth conventions:
-  - Username comes from `claims.username` after removing the configured `USERNAME_PREFIX`.
-  - Admin check reads `claims['cognito:groups']` and requires `ADMIN`.
-- TypeScript convention:
-  - `interface` for behavior/contracts implemented by classes.
-  - `type` for DTOs, data models, and value objects.
-- Keep line endings LF.
+## Data and access boundaries
+
+- Reuse `src/shared/ruleset.ts`, `configured-table.ts`, and `pii-scan.ts` key helpers/contracts. Grant attributes are lowercase (`pk`, `sk`, `gsiPendingPk`, `gsiAllPk`); key formats live in `create_request/main.ts`.
+- `get_record` resolves active ruleset scopes and unredact paths before redaction. Detector/redactor share `src/shared/path-pattern.ts` (`*`, `[]`, `[i]`, no `$` prefix); preserve compatibility.
+- Shared `getStsSession` caches cross-account `DbAccessorAppRole` credentials. Scanning requires target-role `dynamodb:Scan` permission.
+
+## PII detection and suggestions
+
+- Private synchronous `pii_detector`: pure `PiiDetectionEngine` coordinates `detectors/` classes owning aliases/validators. Keep AWS/scanning/persistence outside the engine. Contracts: `src/shared/pii-detection.ts`; envelope limits: `pii_detector/request-validator.ts`.
+- Flow: enable API or daily dispatcher → FIFO SQS → `pii_scan_worker` → synchronous detector → latest suggestion snapshot. Configured tables opt in through the sparse `gsiPiiDetection` index; suggestions require manual ruleset creation and key-scope selection.
+- Admin routes: `PATCH /admin/configured-tables/pii-detection` and `GET /admin/configured-tables/pii-suggestions`. Scan/task/state contracts are in `src/shared/pii-scan.ts`; queue publication is in `pii-scan-task-publisher.ts`.
+- Worker modules: `dynamodb-sampler.ts`, `observation-flattener.ts`, `pii-detector-client.ts`, `suggestion-aggregator.ts`; read their constants for budgets/batching. Sampling is bounded/approximate; injected randomness defaults to `Math.random`. Retries are not reproducible.
+- Flatten low-level DynamoDB values; numeric sentinels preserve path-only classification without precision loss. Normalize arrays/sets to `[]`; skip unrepresentable keys/oversized observations. Suggestion paths obey the shorter ruleset path limit.
+- Sample values are permitted only in memory and synchronous detector payloads. Do not put them or target record key values in SQS tasks, logs, persisted suggestions, or admin responses. Persist paths, entity types, evidence, counts, and scan metadata; count support once per sampled record.
 
 ## Workflow
 
-- Prefer focused changes. Do not refactor unrelated handlers or infra while fixing one path.
-- Add or update focused tests when touching shared ruleset/redaction/key logic or request state transitions.
-- Run the narrowest useful verification first; run broader commands when touching shared code.
-- Never commit, tag, deploy, or open PRs unless explicitly asked.
-- PR commit style is conventional commit compatible: `feat`, `fix`, `refactor`, `chore`; semver labels are inferred downstream.
+- Keep changes focused and preserve unrelated work. Add focused regression coverage for shared path/key logic and request or scan state transitions.
+- Do not commit, tag, deploy, or open PRs unless explicitly requested. Use conventional commit types `feat`, `fix`, `refactor`, or `chore`; CI infers semver labels from them.
+- Keep PR descriptions concise. Include a relevant diagram when expanding the architecture.
+- Maintain this guide for durable command/convention changes. Prefer source pointers; omit task logs, test counts, and temporary workarounds. Mention updates in the final summary.

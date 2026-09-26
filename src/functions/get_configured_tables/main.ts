@@ -66,6 +66,7 @@ class LambdaHandler {
         ...(item.skName ? { sk: item.skName } : {}),
         createdAt: item.createdAt,
         createdBy: item.createdBy,
+        piiDetectionEnabled: item.piiDetectionEnabled === true,
       })),
     );
   }

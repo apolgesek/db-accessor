@@ -16,10 +16,16 @@ export type ConfiguredDynamoDbTable = {
   gsiAccountSk: string;
   gsiAccountRegionPk: string;
   gsiAccountRegionSk: string;
+  piiDetectionEnabled?: boolean;
+  piiDetectionUpdatedAt?: string;
+  piiDetectionUpdatedBy?: string;
+  gsiPiiDetectionPk?: string;
+  gsiPiiDetectionSk?: string;
 };
 
 export const CONFIGURED_TABLE_SK = 'METADATA';
 export const CONFIGURED_TABLES_ALL_PK = 'CONFIGURED_TABLES';
+export const PII_DETECTION_ENABLED_PK = 'PII_DETECTION_ENABLED';
 
 export function getConfiguredTablePk(accountId: string, region: string, table: string): string {
   return `CONFIGURED_TABLE#${accountId}#${region}#${table}`;
@@ -35,4 +41,8 @@ export function getConfiguredTableAccountRegionPk(accountId: string, region: str
 
 export function getConfiguredTableSortKey(createdAtTimestamp: number, ...parts: string[]): string {
   return [createdAtTimestamp.toString(), ...parts].join('#');
+}
+
+export function getPiiDetectionSortKey(accountId: string, region: string, table: string): string {
+  return [accountId, region, table].join('#');
 }

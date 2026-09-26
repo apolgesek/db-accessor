@@ -1,4 +1,4 @@
-import path from 'path';
+import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -15,6 +15,8 @@ export interface CreateLambdaOptions {
   logGroupRemovalPolicy?: cdk.RemovalPolicy;
   logRetention?: logs.RetentionDays;
   role?: iam.IRole;
+  memorySize?: number;
+  reservedConcurrentExecutions?: number;
 }
 
 export function createLambda(scope: Construct, options: CreateLambdaOptions) {
@@ -32,6 +34,8 @@ export function createLambda(scope: Construct, options: CreateLambdaOptions) {
     environment: options.environment,
     timeout: options.timeout,
     role: options.role,
+    memorySize: options.memorySize,
+    reservedConcurrentExecutions: options.reservedConcurrentExecutions,
     bundling: { minify: true, sourceMap: true, target: 'es2020' },
   });
 

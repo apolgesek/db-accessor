@@ -1,3 +1,5 @@
+import { tokenizePath } from '../../shared/path-pattern';
+
 export const DEFAULT_REDACTION = '<redacted>';
 
 export type RedactOptions = { mutate?: boolean };
@@ -110,8 +112,8 @@ export class PathPatternRedactor {
     const root: TrieNode = { children: new Map(), redact: false };
 
     for (const p of patterns) {
-      const tokens = this.tokenizePath(p);
-      if (tokens.length === 0) continue;
+      const tokens = tokenizePath(p);
+      if (!tokens) continue;
 
       let cur = root;
       for (const t of tokens) {
@@ -126,32 +128,5 @@ export class PathPatternRedactor {
     }
 
     return root;
-  }
-
-  /**
-   * Examples:
-   * - "contacts[].email" -> ["contacts","[]","email"]
-   * - "orders[0].customer.email" -> ["orders","[0]","customer","email"]
-   * - "payments.*.cardNumber" -> ["payments","*","cardNumber"]
-   */
-  private tokenizePath(pattern: string): string[] {
-    const rawParts = pattern
-      .split('.')
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const tokens: string[] = [];
-
-    for (const part of rawParts) {
-      // leading name (could be "*" or "field")
-      const m = part.match(/^[^\[]+/);
-      if (m?.[0]) tokens.push(m[0]);
-
-      // bracket tokens like [] or [0]
-      const brackets = part.match(/\[[^\]]*\]/g);
-      if (brackets) tokens.push(...brackets);
-    }
-
-    return tokens;
   }
 }
