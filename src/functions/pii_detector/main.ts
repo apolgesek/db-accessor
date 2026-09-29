@@ -13,7 +13,7 @@ export class LambdaHandler {
     private readonly now: () => number = Date.now,
   ) {}
 
-  handle(event: unknown): DetectPiiResponse {
+  async handle(event: unknown): Promise<DetectPiiResponse> {
     const startedAt = this.now();
     validateDetectPiiRequest(event);
 
