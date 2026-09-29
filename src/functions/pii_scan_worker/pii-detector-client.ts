@@ -44,17 +44,18 @@ export class PiiDetectorClient {
       );
       if (response.FunctionError || !response.Payload) throw new PiiDetectorInvocationError();
 
-      let payload: DetectPiiResponse;
+      let payload: DetectPiiResponse | null;
       try {
-        payload = JSON.parse(Buffer.from(response.Payload).toString('utf8')) as DetectPiiResponse;
+        payload = JSON.parse(Buffer.from(response.Payload).toString('utf8')) as DetectPiiResponse | null;
       } catch {
         throw new PiiDetectorInvocationError();
       }
       if (
+        !payload ||
         payload.version !== 1 ||
         !Array.isArray(payload.results) ||
         payload.results.length !== batch.length ||
-        payload.results.some((result, index) => result.id !== batch[index].id)
+        payload.results.some((result, index) => result?.id !== batch[index].id || result.path !== batch[index].path)
       ) {
         throw new PiiDetectorInvocationError();
       }

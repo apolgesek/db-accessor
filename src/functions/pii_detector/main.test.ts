@@ -1,5 +1,5 @@
 import { DetectPiiRequest } from '../../shared/pii-detection';
-import { LambdaHandler } from './main';
+import { LambdaHandler, lambdaHandler } from './main';
 import { InvalidDetectPiiRequestError } from './request-validator';
 
 const validRequest = (): DetectPiiRequest => ({
@@ -8,6 +8,18 @@ const validRequest = (): DetectPiiRequest => ({
 });
 
 describe('PII detector Lambda handler', () => {
+  test('exported entrypoint returns a Promise resolving to the response for the Lambda runtime', async () => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const response = lambdaHandler({ version: 1, items: [] });
+
+      expect(response).toBeInstanceOf(Promise);
+      await expect(response).resolves.toEqual({ version: 1, results: [] });
+    } finally {
+      info.mockRestore();
+    }
+  });
+
   test.each([
     undefined,
     null,
@@ -21,35 +33,37 @@ describe('PII detector Lambda handler', () => {
     { version: 1, items: [{ id: '', path: 'email', value: 'x' }] },
     { version: 1, items: [{ id: 'one', path: 'email', value: 'x', extra: true }] },
     { version: 1, items: [], extra: true },
-  ])('rejects malformed envelope %#', (event) => {
-    expect(() => new LambdaHandler().handle(event)).toThrow(InvalidDetectPiiRequestError);
+  ])('rejects malformed envelope %#', async (event) => {
+    await expect(new LambdaHandler().handle(event)).rejects.toThrow(InvalidDetectPiiRequestError);
   });
 
-  test('rejects duplicate IDs', () => {
+  test('rejects duplicate IDs', async () => {
     const event = validRequest();
     event.items.push({ id: 'one', path: 'profile.phone', value: '+44 20 7946 0018' });
-    expect(() => new LambdaHandler().handle(event)).toThrow(InvalidDetectPiiRequestError);
+    await expect(new LambdaHandler().handle(event)).rejects.toThrow(InvalidDetectPiiRequestError);
   });
 
   test.each([
     { id: 'x'.repeat(129), path: 'email', value: 'x' },
     { id: 'one', path: 'x'.repeat(513), value: 'x' },
     { id: 'one', path: 'email', value: 'ą'.repeat(8193) },
-  ])('rejects an oversized item %#', (item) => {
-    expect(() => new LambdaHandler().handle({ version: 1, items: [item] })).toThrow(InvalidDetectPiiRequestError);
+  ])('rejects an oversized item %#', async (item) => {
+    await expect(new LambdaHandler().handle({ version: 1, items: [item] })).rejects.toThrow(
+      InvalidDetectPiiRequestError,
+    );
   });
 
-  test('rejects more than 1,000 items', () => {
+  test('rejects more than 1,000 items', async () => {
     const items = Array.from({ length: 1_001 }, (_, index) => ({ id: String(index), path: 'value', value: 'x' }));
-    expect(() => new LambdaHandler().handle({ version: 1, items })).toThrow(InvalidDetectPiiRequestError);
+    await expect(new LambdaHandler().handle({ version: 1, items })).rejects.toThrow(InvalidDetectPiiRequestError);
   });
 
-  test('accepts documented limits', () => {
+  test('accepts documented limits', async () => {
     const item = { id: 'x'.repeat(128), path: 'x'.repeat(512), value: 'x'.repeat(16 * 1024) };
-    expect(new LambdaHandler().handle({ version: 1, items: [item] }).results).toHaveLength(1);
+    expect((await new LambdaHandler().handle({ version: 1, items: [item] })).results).toHaveLength(1);
   });
 
-  test('logs counts and timing without logging values', () => {
+  test('logs counts and timing without logging values', async () => {
     const info = jest.fn();
     const now = jest.fn().mockReturnValueOnce(100).mockReturnValueOnce(107);
     const handler = new LambdaHandler(undefined, { info }, now);
@@ -57,7 +71,7 @@ describe('PII detector Lambda handler', () => {
     event.items.push({ id: 'two', path: 'broken..path', value: 'do-not-log-this' });
     event.items.push({ id: 'three', path: 'profile.note', value: 'ordinary' });
 
-    handler.handle(event);
+    await handler.handle(event);
 
     expect(info).toHaveBeenCalledWith('PII detection completed', {
       inputCount: 3,
