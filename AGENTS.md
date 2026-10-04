@@ -31,12 +31,14 @@ Root and `infra/` have separate npm packages/lockfiles. Install dependencies wit
 - HTTP handlers use colocated Joi `request-schema.ts` and shared `APIResponse.success/error`; validation failures return `400, 'Invalid request'`. Internal Lambda/SQS handlers follow their event contracts.
 - Admin handlers enforce shared `isAdmin` even with API authorization. Use shared `toAppUsername`; `USERNAME_PREFIX` must be defined (empty is valid).
 - Use `interface` for implemented behavior contracts and `type` for DTOs/value objects. Keep LF line endings and existing formatting.
+- Prefer `Boolean(value)` over `!!value` when converting values to booleans.
 
 ## Data and access boundaries
 
 - Reuse `src/shared/ruleset.ts`, `configured-table.ts`, and `pii-scan.ts` key helpers/contracts. Grant attributes are lowercase (`pk`, `sk`, `gsiPendingPk`, `gsiAllPk`); key formats live in `create_request/main.ts`.
 - `get_record` resolves active ruleset scopes and unredact paths before redaction. Detector/redactor share `src/shared/path-pattern.ts` (`*`, `[]`, `[i]`, no `$` prefix); preserve compatibility.
 - Shared `getStsSession` caches cross-account `DbAccessorAppRole` credentials. Scanning requires target-role `dynamodb:Scan` permission.
+- STS role assumption always uses `eu-central-1`; DynamoDB clients still use the requested target region. `/accounts.regionsByAccount` lists enabled regions using each allowed account's role and requires target-role `ec2:DescribeRegions` on `*`. SSM supplies display names only.
 
 ## PII detection and suggestions
 
