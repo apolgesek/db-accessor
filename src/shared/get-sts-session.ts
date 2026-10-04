@@ -29,8 +29,8 @@ function isSessionNotExpired(session: CachedSession): boolean {
   return Date.now() < session.expiresAtMs;
 }
 
-async function assumeStsSession(accountId: string, region: string): Promise<CachedSession> {
-  const sts = new STSClient({ region });
+async function assumeStsSession(accountId: string): Promise<CachedSession> {
+  const sts = new STSClient({ region: 'eu-central-1' });
 
   const res = await sts.send(
     new AssumeRoleCommand({
@@ -69,7 +69,7 @@ export async function getStsSession(accountId: string, region: string) {
     return (await inFlightRefresh).creds;
   }
 
-  const refreshPromise = assumeStsSession(accountId, region)
+  const refreshPromise = assumeStsSession(accountId)
     .then((newSession) => {
       sessionCacheByAccountAndRegion.set(cacheKey, newSession);
       return newSession;

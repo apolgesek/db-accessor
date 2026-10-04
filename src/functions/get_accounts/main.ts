@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
+import { DescribeRegionsCommand, EC2Client } from '@aws-sdk/client-ec2';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
@@ -25,7 +26,23 @@ class LambdaHandler {
     const orgClient = new OrganizationsClient({ region: process.env.AWS_REGION, credentials: creds });
     const [accounts, regions] = await Promise.all([this.listAllAccounts(orgClient), this.listRegionsViaSsm()]);
 
-    return APIResponse.success(200, { accounts, regions });
+    const regionsByAccount: Record<string, { code: string; longName: string }[]> = {};
+
+    for (const account of accounts) {
+      const accountCreds = await getStsSession(account.id!, 'eu-central-1');
+      const ec2 = new EC2Client({ region: 'eu-central-1', credentials: accountCreds });
+      const enabledRegions = await ec2.send(new DescribeRegionsCommand({ AllRegions: false }));
+
+      regionsByAccount[account.id!] = (enabledRegions.Regions ?? [])
+        .filter((region) => Boolean(region.RegionName))
+        .map((region) => ({
+          code: region.RegionName!,
+          longName: regions.find((entry) => entry.code === region.RegionName)?.longName ?? region.RegionName!,
+        }))
+        .sort((a, b) => a.code.localeCompare(b.code));
+    }
+
+    return APIResponse.success(200, { accounts, regions, regionsByAccount });
   }
 
   async listRegionsViaSsm() {
