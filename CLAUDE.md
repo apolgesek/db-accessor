@@ -8,8 +8,8 @@ Work from the repository root unless noted. Backend services and application CDK
 - `src/shared/`: contracts, key helpers, authentication, path grammar, and AWS utilities.
 - `infra/lib/`: `stack.ts` assembles resources; `lambda-functions.ts` wires Lambdas/env/IAM; `rest-api.ts` defines routes; `dynamodb-tables.ts` and `messaging.ts` define storage/queues.
 - `infra/lib/lambda-factory.ts`: maps kebab-case function names to snake_case folders and bundles `lambdaHandler` exports.
-- `GLOSSARY.md`: domain terms (browser login session, qualifying activity, record-access grant). Use them and avoid the listed alternatives.
-- `docs/adr/`: accepted architecture decisions; follow them rather than re-deciding. `docs/specs/`: feature specs and technical designs. A design doc does not authorize implementation on its own.
+- `GLOSSARY.md`: domain terms (browser login session, idle deadline, qualifying activity, record-access grant, …). Use them and avoid the listed alternatives.
+- `docs/adr/`: accepted architecture decisions; follow them rather than re-deciding. Feature specs and tickets live in GitHub Issues (see Agent skills); a spec does not authorize implementation on its own.
 
 ## Verification
 
@@ -92,3 +92,15 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 ### Domain docs
 
 Single-context: root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
+### Specs
+
+A spec's "Implementation Decisions" must let a reader who has not seen the conversation understand the building blocks:
+
+- Module map: each new or changed module's responsibility, public interface, and dependencies.
+- Data schema: stored records, keys, and the conditions that guard writes.
+- API contracts: routes or events, payloads, and error cases with their codes.
+- Key interaction sequences, step by step, including failure and concurrency paths.
+- A component diagram, plus sequence diagrams where an interaction spans more than two modules.
+
+Describe modules by name and responsibility, not file paths. Include a state machine, type shape, or schema snippet when it states a decision more precisely than prose.
