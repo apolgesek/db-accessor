@@ -55,24 +55,21 @@ export const REST_ROUTES = [
 ] as const satisfies readonly RestRoute[];
 
 export type RestFunctionName = (typeof REST_ROUTES)[number]['functionName'];
+export type RestPath = (typeof REST_ROUTES)[number]['path'];
+export type RestPreflightMethod = 'OPTIONS' | RestMethod;
 
-// CORS preflight `allowMethods` per path, as deployed. `/record/{id}` and `/notifications` also allow POST,
-// which has no method; kept so the deployed API is unchanged.
-export const REST_PREFLIGHT_METHODS: Readonly<Record<string, readonly string[]>> = {
+// Deployed preflight `allowMethods` that cannot be derived from the routes: both also allow POST, which has
+// no method. Kept so the deployed API is unchanged.
+export const REST_PREFLIGHT_OVERRIDES: Partial<Record<RestPath, readonly RestPreflightMethod[]>> = {
   '/record/{id}': ['OPTIONS', 'POST', 'GET'],
-  '/request': ['OPTIONS', 'POST', 'GET'],
-  '/request/{id}/unredact': ['OPTIONS', 'POST'],
-  '/admin/request': ['OPTIONS', 'GET'],
-  '/admin/approve-request': ['OPTIONS', 'PUT'],
-  '/admin/reject-request': ['OPTIONS', 'PUT'],
-  '/accounts': ['OPTIONS', 'GET'],
-  '/tables': ['OPTIONS', 'GET'],
-  '/configured-tables': ['OPTIONS', 'GET'],
   '/notifications': ['OPTIONS', 'GET', 'POST'],
-  '/notifications/read': ['OPTIONS', 'POST'],
-  '/admin/create-ruleset': ['OPTIONS', 'POST'],
-  '/admin/ruleset': ['OPTIONS', 'GET'],
-  '/admin/configured-tables': ['OPTIONS', 'POST', 'DELETE'],
-  '/admin/configured-tables/pii-detection': ['OPTIONS', 'PUT'],
-  '/admin/configured-tables/pii-suggestions': ['OPTIONS', 'GET'],
 };
+
+// CORS preflight `allowMethods` per routed path: OPTIONS, then the path's methods in table order.
+export const REST_PREFLIGHT_METHODS: ReadonlyMap<RestPath, readonly RestPreflightMethod[]> = (() => {
+  const derived = new Map<RestPath, RestPreflightMethod[]>();
+  for (const route of REST_ROUTES) {
+    derived.set(route.path, [...(derived.get(route.path) ?? ['OPTIONS']), route.method]);
+  }
+  return new Map([...derived].map(([path, methods]) => [path, REST_PREFLIGHT_OVERRIDES[path] ?? methods]));
+})();

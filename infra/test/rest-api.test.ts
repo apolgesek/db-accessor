@@ -4,32 +4,8 @@ import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import { Template } from 'aws-cdk-lib/assertions';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { REST_PREFLIGHT_METHODS, REST_ROUTES } from '../../src/shared/rest-routes';
-import { RestLambdaFunctions, createRestApi } from '../lib/rest-api';
-
-const lambdaKeys: (keyof RestLambdaFunctions)[] = [
-  'getRecordFn',
-  'createRequestFn',
-  'getRequestFn',
-  'createUnredactRequestFn',
-  'adminGetRequestFn',
-  'adminApproveRequestFn',
-  'adminRejectRequestFn',
-  'getAccountsFn',
-  'getTablesFn',
-  'getConfiguredTablesFn',
-  'getNotificationsFn',
-  'markNotificationsReadFn',
-  'adminCreateRulesetFn',
-  'adminGetRulesetFn',
-  'adminCreateConfiguredTableFn',
-  'adminUpdatePiiDetectionFn',
-  'adminGetPiiSuggestionsFn',
-  'adminDeleteConfiguredTableFn',
-];
-
-// Lambda key → kebab-case function name, e.g. getRecordFn → get-record.
-const functionNameOf = (key: string) => key.replace(/Fn$/, '').replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+import { REST_PREFLIGHT_METHODS, REST_ROUTES, RestPath } from '../../src/shared/rest-routes';
+import { REST_LAMBDA_KEYS, RestLambdaFunctions, createRestApi } from '../lib/rest-api';
 
 describe('REST API', () => {
   let stack: cdk.Stack;
@@ -42,14 +18,14 @@ describe('REST API', () => {
     const userPool = new cognito.UserPool(stack, 'UserPool');
     functionsByName = new Map();
     const lambdas = {} as Record<keyof RestLambdaFunctions, lambda.IFunction>;
-    for (const key of lambdaKeys) {
+    for (const [functionName, key] of Object.entries(REST_LAMBDA_KEYS)) {
       const fn = new lambda.Function(stack, key, {
         runtime: lambda.Runtime.NODEJS_22_X,
         handler: 'index.handler',
         code: lambda.Code.fromInline('exports.handler = async () => ({});'),
       });
       lambdas[key] = fn;
-      functionsByName.set(functionNameOf(key), fn);
+      functionsByName.set(functionName, fn);
     }
 
     api = createRestApi(stack, { projectName: 'db-accessor-dev', stage: 'dev', userPool, lambdas }).api;
@@ -94,7 +70,7 @@ describe('REST API', () => {
   test('adds CORS preflight with the declared methods to exactly the declared paths', () => {
     const preflights = api.methods.filter((method) => method.httpMethod === 'OPTIONS');
 
-    expect(preflights.map((method) => method.resource.path).sort()).toEqual(Object.keys(REST_PREFLIGHT_METHODS).sort());
+    expect(preflights.map((method) => method.resource.path).sort()).toEqual([...REST_PREFLIGHT_METHODS.keys()].sort());
     for (const method of preflights) {
       const integration = methodProperties(method).Integration as {
         IntegrationResponses: { ResponseParameters: Record<string, string> }[];
@@ -102,7 +78,7 @@ describe('REST API', () => {
 
       expect(integration.IntegrationResponses[0].ResponseParameters).toMatchObject({
         'method.response.header.Access-Control-Allow-Origin': "'*'",
-        'method.response.header.Access-Control-Allow-Methods': `'${REST_PREFLIGHT_METHODS[method.resource.path].join(',')}'`,
+        'method.response.header.Access-Control-Allow-Methods': `'${REST_PREFLIGHT_METHODS.get(method.resource.path as RestPath)!.join(',')}'`,
       });
     }
   });

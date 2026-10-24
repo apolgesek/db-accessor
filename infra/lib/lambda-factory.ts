@@ -5,6 +5,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
+import { lambdaFolderName } from '../../src/shared/lambda-name';
 import { repoRoot } from './paths';
 
 export interface CreateLambdaOptions {
@@ -22,7 +23,7 @@ export interface CreateLambdaOptions {
 
 export function createLambda(scope: Construct, options: CreateLambdaOptions) {
   const functionName = `${options.projectName}-${options.fnName}`;
-  const entry = path.join(repoRoot, 'src', 'functions', options.fnName.replaceAll('-', '_'), 'main.ts');
+  const entry = path.join(repoRoot, 'src', 'functions', lambdaFolderName(options.fnName), 'main.ts');
 
   const fn = new nodejs.NodejsFunction(scope, functionName, {
     functionName,

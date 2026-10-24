@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { lambdaFolderName } from './lambda-name';
 import { REST_PREFLIGHT_METHODS, REST_ROUTES } from './rest-routes';
 
 describe('REST route table', () => {
@@ -11,22 +12,22 @@ describe('REST route table', () => {
 
   test('points every route at an existing Lambda entrypoint', () => {
     for (const route of REST_ROUTES) {
-      const entry = path.join(__dirname, '..', 'functions', route.functionName.replace(/-/g, '_'), 'main.ts');
+      const entry = path.join(__dirname, '..', 'functions', lambdaFolderName(route.functionName), 'main.ts');
 
       expect(fs.existsSync(entry)).toBe(true);
     }
   });
 
-  test('allows every routed method in its path preflight', () => {
+  test('allows every routed method in its path preflight, including overridden paths', () => {
     for (const route of REST_ROUTES) {
-      expect(REST_PREFLIGHT_METHODS[route.path]).toEqual(expect.arrayContaining(['OPTIONS', route.method]));
+      expect(REST_PREFLIGHT_METHODS.get(route.path)).toEqual(expect.arrayContaining(['OPTIONS', route.method]));
     }
   });
 
-  test('declares preflight only for routed paths', () => {
-    const routedPaths = new Set<string>(REST_ROUTES.map((route) => route.path));
-
-    expect(Object.keys(REST_PREFLIGHT_METHODS).filter((routePath) => !routedPaths.has(routePath))).toEqual([]);
+  test('derives preflight as OPTIONS followed by the path methods in table order', () => {
+    expect(REST_PREFLIGHT_METHODS.get('/request')).toEqual(['OPTIONS', 'POST', 'GET']);
+    expect(REST_PREFLIGHT_METHODS.get('/admin/configured-tables')).toEqual(['OPTIONS', 'POST', 'DELETE']);
+    expect(REST_PREFLIGHT_METHODS.get('/tables')).toEqual(['OPTIONS', 'GET']);
   });
 
   test('puts every existing business route under the session policy', () => {
