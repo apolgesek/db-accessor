@@ -10,6 +10,7 @@ import {
   createRequestStatusNotificationWorker,
 } from './lambda-functions';
 import { createMessagingResources } from './messaging';
+import { createOperationalFailureAlarm } from './operational-alarms';
 import { createRequestStatusEmailResources } from './emails';
 import { createRestApi } from './rest-api';
 import { importIssueTrackingSecret } from './secrets';
@@ -76,6 +77,8 @@ export class DbAccessorStack extends cdk.Stack {
       issueTrackingSecret,
       userPool: cognitoResources.userPool,
     });
+
+    createOperationalFailureAlarm(this, projectName);
 
     const websocket = createWebSocketApi(this, {
       projectName,

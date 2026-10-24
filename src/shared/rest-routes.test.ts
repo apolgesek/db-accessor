@@ -30,7 +30,9 @@ describe('REST route table', () => {
     expect(REST_PREFLIGHT_METHODS.get('/tables')).toEqual(['OPTIONS', 'GET']);
   });
 
-  test('puts every existing business route under the session policy', () => {
-    expect(REST_ROUTES.filter((route) => route.policy !== 'session')).toEqual([]);
+  test('exempts only the session routes from the session policy', () => {
+    const lifecycleRoutes = REST_ROUTES.filter((route) => route.policy === 'sessionLifecycle');
+
+    expect(lifecycleRoutes.map((route) => `${route.method} ${route.path}`)).toEqual(['POST /session', 'GET /session']);
   });
 });
