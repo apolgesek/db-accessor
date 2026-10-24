@@ -2,12 +2,25 @@
 status: accepted
 ---
 
-# Enforce browser login sessions alongside Cognito authentication
+# Enforce idle browser login sessions in the backend, keyed by Cognito login lineage
 
-Accepted on 2026-10-08. Cognito token renewal can outlive the application's idle deadline, and an old valid JWT must not create a replacement for an expired browser login session. Keep the existing browser OIDC flow and Cognito REST authorizer; extend the existing pre-token trigger to issue a signed, single-use bootstrap proof only during hosted login, and enforce persistent session state through a mandatory shared REST wrapper wired at the entrypoint/build boundary.
+Cognito token refresh can keep credentials valid long after a browser login session's 15-minute idle deadline, so a valid JWT alone must not authorize interactive use. We keep the existing Cognito OIDC flow and REST authorizer and add backend-owned session state in a dedicated DynamoDB table, keyed by the access token's `origin_jti`: the identifier Cognito assigns to one login's refresh-token lineage. A new login gets a new `origin_jti` and refreshes keep it, so the server derives the session from the token itself, and a retained row for an ended session stops every token of that login from starting a new idle window. Every protected REST handler is explicitly wrapped with a session guard, and a unit test fails when a registered REST route's handler is not wrapped. WebSocket connections bind to the same session, and each notification send is authorized immediately before dispatch.
 
-Use a dedicated DynamoDB session table with strong reads, conditional updates, and retained replay protection; a valid Cognito token alone does not authorize an interactive request. This preserves existing handler contracts and role/grant checks while avoiding a backend OAuth-exchange migration or replacement REST authorizer, at the cost of enforcing wrapper coverage and coordinating the frontend/backend cutover.
+The idle deadline moves only through an explicit activity endpoint that the UI calls for keydowns, clicks, and Continue inside the application. Business API requests require an active session but never extend it.
 
-WebSocket connections reference the same browser login session, and the notification worker checks it immediately before dispatch. Already-authorized messages may complete after expiry because database authorization and network delivery cannot be atomic. Notification persistence remains per user, independently of which browser sessions are active.
+A tab that cannot confirm whether the session has expired locks itself instead of logging out every tab; only confirmed expiry triggers the shared timeout logout. Explicit logout always tears down local access immediately and makes one bounded server invalidation attempt, accepting that an unreachable server keeps recognizing the session until its existing idle deadline.
 
-The [design companion](../specs/idle-session-timeout-design.md) tracks dependent decisions and validation, including actual Cognito refresh-lineage behavior. This decision authorizes design documentation only, not implementation or deployment.
+## Considered Options
+
+- **Signed single-use bootstrap proof from the pre-token trigger as the session ID.** Rejected as the primary design: it adds a custom claim, a client-sent session header, and proof-expiry bookkeeping, yet still needed `origin_jti` to bind refreshed tokens to the login. It remains the fallback if `origin_jti` fails validation.
+- **Counting user-triggered business API requests as activity.** Rejected: every action handler and route resolver would have to classify its requests, and misclassification is silent. Counting the gestures themselves is simpler and almost equivalent; the difference is that a click which sends no request also counts.
+- **Build-time shared entrypoint selected with an esbuild define.** Rejected: unproven bundling behavior and harder to follow than an explicit wrapper, which gets the same guarantee from a coverage test.
+- **Replacement Lambda REST authorizer or backend OAuth token exchange.** Rejected: a larger migration that re-implements Cognito validation and loses the existing authorizer.
+- **Global logout from any tab whose local deadline elapsed.** Rejected: a stale or offline tab would falsely end a session another tab had just extended.
+
+## Consequences
+
+- Session rows must be retained for at least the longest lifetime of a login lineage (refresh-token validity plus access-token validity). Changing Cognito token lifetimes, disabling token revocation (without which Cognito omits `origin_jti`), or enabling refresh-token rotation requires revisiting this decision.
+- Access and ID tokens last 15 minutes and refresh tokens 12 hours. With rotation off, Cognito counts refresh validity from the original login, so the refresh token also caps every login at 12 hours regardless of activity; no separate absolute-lifetime mechanism exists. The short access token bounds how long a disabled user or a removed group membership keeps working, because the REST authorizer validates JWTs without checking revocation.
+- Authorizing a WebSocket message and delivering it cannot be atomic, so a message authorized just before expiry may arrive just after it.
+- There is no sessionless compatibility path. Once backend enforcement is live, clients without session support fail closed until they reload the updated UI.
