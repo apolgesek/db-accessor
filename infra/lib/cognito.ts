@@ -6,6 +6,11 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
+import {
+  ACCESS_TOKEN_VALIDITY_MINUTES,
+  ID_TOKEN_VALIDITY_MINUTES,
+  REFRESH_TOKEN_VALIDITY_HOURS,
+} from '../../src/shared/token-lifetimes';
 import { createLambda, CreateLambdaOptions } from './lambda-factory';
 
 export interface CreateCognitoResourcesOptions {
@@ -127,6 +132,11 @@ export function createCognitoResources(scope: Construct, options: CreateCognitoR
     authFlows: {
       userSrp: true,
     },
+    accessTokenValidity: cdk.Duration.minutes(ACCESS_TOKEN_VALIDITY_MINUTES),
+    idTokenValidity: cdk.Duration.minutes(ID_TOKEN_VALIDITY_MINUTES),
+    refreshTokenValidity: cdk.Duration.hours(REFRESH_TOKEN_VALIDITY_HOURS),
+    // Session IDs are the access token's origin_jti, which Cognito only issues with revocation enabled.
+    enableTokenRevocation: true,
     oAuth: {
       flows: {
         authorizationCodeGrant: true,
@@ -136,6 +146,8 @@ export function createCognitoResources(scope: Construct, options: CreateCognitoR
       logoutUrls: [`https://${options.domain}/login`, 'http://localhost:4200/login'],
     },
   });
+  // Rotation is pinned off: Cognito does not document whether origin_jti survives it.
+  (userPoolClient.node.defaultChild as cognito.CfnUserPoolClient).refreshTokenRotation = { feature: 'DISABLED' };
   if (samlProvider) {
     userPoolClient.node.addDependency(samlProvider);
   }

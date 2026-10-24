@@ -10,6 +10,7 @@ export interface DynamoDbTables {
   piiSuggestionsTable: dynamodb.Table;
   notificationTable: dynamodb.Table;
   websocketConnectionTable: dynamodb.Table;
+  sessionsTable: dynamodb.Table;
 }
 
 export interface CreateDynamoDbTablesOptions {
@@ -125,6 +126,14 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
   });
 
+  const sessionsTable = new dynamodb.Table(scope, `${projectName}-sessions`, {
+    tableName: `${projectName}-sessions`,
+    partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+    billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    timeToLiveAttribute: 'ttl',
+    removalPolicy,
+  });
+
   return {
     auditTable,
     grantTable,
@@ -133,5 +142,6 @@ export function createDynamoDbTables(scope: Construct, options: CreateDynamoDbTa
     piiSuggestionsTable,
     notificationTable,
     websocketConnectionTable,
+    sessionsTable,
   };
 }

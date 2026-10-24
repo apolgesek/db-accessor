@@ -52,6 +52,8 @@ export const REST_ROUTES = [
     functionName: 'admin-delete-configured-table',
     policy: 'session',
   },
+  { method: 'POST', path: '/session', functionName: 'create-session', policy: 'sessionLifecycle' },
+  { method: 'GET', path: '/session', functionName: 'get-session', policy: 'sessionLifecycle' },
 ] as const satisfies readonly RestRoute[];
 
 export type RestFunctionName = (typeof REST_ROUTES)[number]['functionName'];

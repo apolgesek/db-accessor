@@ -6,6 +6,7 @@ Work from the repository root unless noted. Backend services and application CDK
 
 - `src/functions/<snake_case>/main.ts`: Lambda entrypoints; colocated schemas and tests.
 - `src/shared/`: contracts, key helpers, authentication, path grammar, and AWS utilities.
+- Browser login sessions: `src/shared/session-policy.ts` (pure rules), `session-store.ts` (DynamoDB, single-attempt client), `session-service.ts`, and `session-http.ts` (shared session-route handling, coded errors, logs without tokens or session IDs). Tests inject a clock and `src/shared/testing/in-memory-session-store.ts`.
 - `infra/lib/`: `stack.ts` assembles resources; `lambda-functions.ts` wires Lambdas/env/IAM; `rest-api.ts` builds REST methods from the CDK-free route table `src/shared/rest-routes.ts` (add routes there); `dynamodb-tables.ts` and `messaging.ts` define storage/queues.
 - `infra/lib/lambda-factory.ts`: maps kebab-case function names to snake_case folders and bundles `lambdaHandler` exports.
 - `GLOSSARY.md`: domain terms (browser login session, idle deadline, qualifying activity, record-access grant, …). Use them and avoid the listed alternatives.

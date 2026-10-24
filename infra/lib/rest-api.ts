@@ -39,6 +39,8 @@ export const REST_LAMBDA_KEYS = {
   'admin-update-pii-detection': 'adminUpdatePiiDetectionFn',
   'admin-get-pii-suggestions': 'adminGetPiiSuggestionsFn',
   'admin-delete-configured-table': 'adminDeleteConfiguredTableFn',
+  'create-session': 'createSessionFn',
+  'get-session': 'getSessionFn',
 } as const satisfies Record<RestFunctionName, keyof ApplicationLambdaFunctions>;
 
 export type RestLambdaFunctions = Pick<ApplicationLambdaFunctions, (typeof REST_LAMBDA_KEYS)[RestFunctionName]>;

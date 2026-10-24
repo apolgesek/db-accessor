@@ -2,6 +2,7 @@ import { parse } from '@aws-sdk/util-arn-parser';
 import * as cdk from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
@@ -50,6 +51,8 @@ export interface ApplicationLambdaFunctions {
   adminDeleteConfiguredTableFn: lambda.IFunction;
   adminUpdatePiiDetectionFn: lambda.IFunction;
   adminGetPiiSuggestionsFn: lambda.IFunction;
+  createSessionFn: lambda.IFunction;
+  getSessionFn: lambda.IFunction;
 }
 
 export interface DbAccessorLambdaFunctions extends ApplicationLambdaFunctions {
@@ -74,6 +77,31 @@ export interface CreateRequestStatusNotificationWorkerOptions extends LambdaFact
   messaging: MessagingResources;
   websocketApi: apigwv2.WebSocketApi;
   websocketEndpoint: string;
+}
+
+export interface CreateSessionLambdasOptions extends LambdaFactoryDefaults {
+  sharedEnvironment: Record<string, string>;
+  sessionsTable: dynamodb.ITable;
+}
+
+export function createSessionLambdas(scope: Construct, options: CreateSessionLambdasOptions) {
+  const environment = {
+    ...options.sharedEnvironment,
+    SESSIONS_TABLE_NAME: options.sessionsTable.tableName,
+    METRICS_NAMESPACE: options.projectName,
+  };
+  const grantSessionTable = (fn: lambda.IFunction, actions: string[]) =>
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({ effect: iam.Effect.ALLOW, actions, resources: [options.sessionsTable.tableArn] }),
+    );
+
+  const createSessionFn = createConfiguredLambda(scope, options, { fnName: 'create-session', environment });
+  grantSessionTable(createSessionFn, ['dynamodb:PutItem', 'dynamodb:GetItem']);
+
+  const getSessionFn = createConfiguredLambda(scope, options, { fnName: 'get-session', environment });
+  grantSessionTable(getSessionFn, ['dynamodb:GetItem']);
+
+  return { createSessionFn, getSessionFn };
 }
 
 export function createPiiDetectorLambda(scope: Construct, options: LambdaFactoryDefaults): lambda.IFunction {
@@ -441,6 +469,11 @@ export function createApplicationLambdaFunctions(
   tables.configuredTablesTable.grantReadData(adminGetPiiSuggestionsFn);
   tables.piiSuggestionsTable.grantReadData(adminGetPiiSuggestionsFn);
 
+  const { createSessionFn, getSessionFn } = createSessionLambdas(scope, {
+    ...options,
+    sessionsTable: tables.sessionsTable,
+  });
+
   return {
     piiDetectorFn,
     piiScanDispatcherFn,
@@ -468,6 +501,8 @@ export function createApplicationLambdaFunctions(
     adminDeleteConfiguredTableFn,
     adminUpdatePiiDetectionFn,
     adminGetPiiSuggestionsFn,
+    createSessionFn,
+    getSessionFn,
   };
 }
 
