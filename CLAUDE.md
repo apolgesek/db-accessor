@@ -8,6 +8,8 @@ Work from the repository root unless noted. Backend services and application CDK
 - `src/shared/`: contracts, key helpers, authentication, path grammar, and AWS utilities.
 - `infra/lib/`: `stack.ts` assembles resources; `lambda-functions.ts` wires Lambdas/env/IAM; `rest-api.ts` defines routes; `dynamodb-tables.ts` and `messaging.ts` define storage/queues.
 - `infra/lib/lambda-factory.ts`: maps kebab-case function names to snake_case folders and bundles `lambdaHandler` exports.
+- `GLOSSARY.md`: domain terms (browser login session, qualifying activity, record-access grant). Use them and avoid the listed alternatives.
+- `docs/adr/`: accepted architecture decisions; follow them rather than re-deciding. `docs/specs/`: feature specs and technical designs. A design doc does not authorize implementation on its own.
 
 ## Verification
 
