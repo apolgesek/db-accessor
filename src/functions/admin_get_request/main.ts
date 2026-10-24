@@ -1,5 +1,5 @@
 import { AttributeValue, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { monthsBetween } from './months-between.util';
@@ -9,7 +9,7 @@ import { isAdmin } from '../../shared/auth';
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const claims = event.requestContext?.authorizer?.claims ?? {};
 
     if (!isAdmin(claims)) {

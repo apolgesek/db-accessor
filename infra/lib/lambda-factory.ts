@@ -20,16 +20,17 @@ export interface CreateLambdaOptions {
 }
 
 export function createLambda(scope: Construct, options: CreateLambdaOptions) {
-  const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
-
   const functionName = `${options.projectName}-${options.fnName}`;
-  const entry = path.join(__dirname, '..', '..', 'src', 'functions', options.fnName.replaceAll('-', '_'), 'main.ts');
+  const projectRoot = path.join(__dirname, '..', '..');
+  const entry = path.join(projectRoot, 'src', 'functions', options.fnName.replaceAll('-', '_'), 'main.ts');
 
   const fn = new nodejs.NodejsFunction(scope, functionName, {
     functionName,
     entry,
+    projectRoot,
+    depsLockFilePath: path.join(projectRoot, 'package-lock.json'),
     handler: 'lambdaHandler',
-    runtime: node22,
+    runtime: lambda.Runtime.NODEJS_22_X,
     architecture: lambda.Architecture.X86_64,
     environment: options.environment,
     timeout: options.timeout,

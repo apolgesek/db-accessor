@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { EntityRequest } from '../../shared/entity-request';
 import { APIResponse } from '../../shared/response';
 import { toAppUsername } from '../../shared/username';
@@ -10,7 +9,7 @@ import { requestSchema } from './request-schema';
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const body = JSON.parse(event.body || '{}');
     const result = requestSchema.validate(body);
 

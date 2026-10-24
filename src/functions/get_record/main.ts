@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
   AttributeValue,
   DescribeTableCommand,
@@ -31,7 +30,10 @@ interface IIssueTrackingAuditPublisher {
 }
 
 export class SqsIssueTrackingAuditPublisher implements IIssueTrackingAuditPublisher {
-  constructor(private readonly sqsClient: SQSClient, private readonly queueUrl?: string) {}
+  constructor(
+    private readonly sqsClient: SQSClient,
+    private readonly queueUrl?: string,
+  ) {}
 
   async publish(event: IssueTrackingAuditEvent): Promise<void> {
     if (!this.queueUrl) {
@@ -145,7 +147,10 @@ class LambdaHandler {
 }
 
 class RecordAccessor {
-  constructor(private readonly targetDbClient: DynamoDBClient, private readonly metadataDbClient: DynamoDBClient) {}
+  constructor(
+    private readonly targetDbClient: DynamoDBClient,
+    private readonly metadataDbClient: DynamoDBClient,
+  ) {}
 
   async getRecord(
     request: EntityRequest & { pkName: string; skName?: string },

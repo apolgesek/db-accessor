@@ -26,12 +26,12 @@ jobs:
       app: ${{ steps.filter-app.outputs.app }}
       infra: ${{ steps.filter-infra.outputs.infra }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - id: filter-app
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             app:
@@ -43,7 +43,7 @@ jobs:
               - '.eslintignore'
 
       - id: filter-infra
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             infra:
@@ -60,18 +60,18 @@ jobs:
     environment: dev
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure AWS credentials for CDK deploy
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.CDK_ROLE_TO_ASSUME_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Node.js for CDK
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install app dependencies
@@ -111,7 +111,7 @@ jobs:
       new_tag: ${{ steps.next.outputs.new_tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -173,7 +173,7 @@ jobs:
       new_tag: ${{ needs.plan-tag.outputs.new_tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true

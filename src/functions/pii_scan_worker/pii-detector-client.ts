@@ -30,7 +30,10 @@ function createBatches(items: readonly DetectPiiItem[]): DetectPiiItem[][] {
 }
 
 export class PiiDetectorClient {
-  constructor(private readonly client: Pick<LambdaClient, 'send'>, private readonly functionName: string) {}
+  constructor(
+    private readonly client: Pick<LambdaClient, 'send'>,
+    private readonly functionName: string,
+  ) {}
 
   async detect(items: readonly DetectPiiItem[]): Promise<DetectPiiResponse['results']> {
     const results: DetectPiiResponse['results'] = [];

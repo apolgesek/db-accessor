@@ -27,7 +27,7 @@ jobs:
       commit_sha: ${{ steps.version.outputs.commit_sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -82,7 +82,7 @@ jobs:
       RELEASE_COMMIT_SHA: ${{ needs.prepare-release.outputs.commit_sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
@@ -98,15 +98,15 @@ jobs:
           fi
 
       - name: Configure AWS credentials for CDK deploy
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ env.CDK_ROLE_TO_ASSUME_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Node.js for CDK
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install app dependencies

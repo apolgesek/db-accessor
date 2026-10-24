@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import {
@@ -11,7 +10,7 @@ import {
 import { requestSchema } from './request-schema';
 
 class LambdaHandler {
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     const result = requestSchema.validate(event.queryStringParameters);
 
     if (result.error) {
@@ -42,7 +41,7 @@ class LambdaHandler {
           const pk = keySchema.find((k) => k.KeyType === 'HASH')?.AttributeName || '';
           const sk = keySchema.find((k) => k.KeyType === 'RANGE')?.AttributeName;
           results.push(sk ? { name, pk, sk } : { name, pk });
-        } catch (err) {
+        } catch {
           results.push({ name, pk: '' });
         }
       }

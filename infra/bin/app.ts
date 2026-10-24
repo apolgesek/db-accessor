@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import fs from 'fs';
 import path from 'path';
 import * as cdk from 'aws-cdk-lib';
