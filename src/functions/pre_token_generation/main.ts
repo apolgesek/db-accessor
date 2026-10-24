@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-import { Context, PreTokenGenerationV2TriggerEvent } from 'aws-lambda';
+import { PreTokenGenerationV2TriggerEvent } from 'aws-lambda';
 
 const GROUP_ID_TO_ROLE: Record<string, string> = {
   '236478d2-5091-7039-872f-9f513edbb58c': 'ADMIN',
@@ -29,7 +28,7 @@ function parseFlattenedIdpAttribute(value: string): string[] {
 }
 
 class LambdaHandler {
-  async handle(event: PreTokenGenerationV2TriggerEvent, context: Context): Promise<PreTokenGenerationV2TriggerEvent> {
+  async handle(event: PreTokenGenerationV2TriggerEvent): Promise<PreTokenGenerationV2TriggerEvent> {
     const userAttributes = event.request?.userAttributes || {};
     const groupConfig = event.request?.groupConfiguration || {};
 

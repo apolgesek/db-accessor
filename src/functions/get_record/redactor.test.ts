@@ -1,6 +1,8 @@
 // path-pattern-redactor.spec.ts
 import { PathPatternRedactor, DEFAULT_REDACTION } from './redactor';
 
+type CircularInput = { self: { secret?: string; loop?: CircularInput } };
+
 describe('PathPatternRedactor', () => {
   test('redacts array wildcard []: contacts[].email', () => {
     const redactor = new PathPatternRedactor(['contacts[].email']);
@@ -104,7 +106,7 @@ describe('PathPatternRedactor', () => {
   test('mutate=true mutates the original object', () => {
     const redactor = new PathPatternRedactor(['a.b']);
 
-    const input: any = { a: { b: 'secret', c: 'ok' } };
+    const input = { a: { b: 'secret', c: 'ok' } };
     const out = redactor.redact(input, { mutate: true });
 
     expect(out).toBe(input); // same reference
@@ -124,8 +126,8 @@ describe('PathPatternRedactor', () => {
   test('handles null / primitives safely', () => {
     const redactor = new PathPatternRedactor(['a.b']);
 
-    expect(redactor.redact(null as any)).toBeNull();
-    expect(redactor.redact(123 as any)).toBe(123);
+    expect(redactor.redact(null)).toBeNull();
+    expect(redactor.redact(123)).toBe(123);
 
     const out = redactor.redact({ a: null });
     expect(out).toEqual({ a: null });
@@ -134,7 +136,7 @@ describe('PathPatternRedactor', () => {
   test('avoids infinite recursion on circular references', () => {
     const redactor = new PathPatternRedactor(['self.secret']);
 
-    const obj: any = { self: {} };
+    const obj: CircularInput = { self: {} };
     obj.self.secret = 'top';
     obj.self.loop = obj; // cycle back
 

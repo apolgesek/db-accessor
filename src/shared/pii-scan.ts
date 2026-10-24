@@ -4,12 +4,7 @@ import { PiiEntityType, PiiEvidence } from './pii-detection';
 export type PiiScanTrigger = 'ENABLED' | 'SCHEDULED';
 export type PiiScanStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 export type PiiScanFailureCode =
-  | 'ACCESS_DENIED'
-  | 'TABLE_NOT_FOUND'
-  | 'DETECTOR_ERROR'
-  | 'TIMEOUT'
-  | 'INVALID_TASK'
-  | 'INTERNAL_ERROR';
+  'ACCESS_DENIED' | 'TABLE_NOT_FOUND' | 'DETECTOR_ERROR' | 'TIMEOUT' | 'INVALID_TASK' | 'INTERNAL_ERROR';
 
 export type PiiScanTask = {
   version: 1;

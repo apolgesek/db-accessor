@@ -29,8 +29,8 @@ class LambdaHandler {
       accountId && region
         ? getConfiguredTableAccountRegionPk(accountId, region)
         : accountId
-        ? getConfiguredTableAccountPk(accountId)
-        : CONFIGURED_TABLES_ALL_PK;
+          ? getConfiguredTableAccountPk(accountId)
+          : CONFIGURED_TABLES_ALL_PK;
 
     const items: ConfiguredDynamoDbTable[] = [];
     let exclusiveStartKey: Record<string, AttributeValue> | undefined;

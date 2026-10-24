@@ -167,7 +167,10 @@ export class IssueTrackingClient {
 export class IssueTrackingCredentialsProvider {
   private cachedSecret?: IssueTrackingSecret;
 
-  constructor(private readonly secretsClient: SecretsManagerClient, private readonly secretName?: string) {}
+  constructor(
+    private readonly secretsClient: SecretsManagerClient,
+    private readonly secretName?: string,
+  ) {}
 
   async getCredentials(): Promise<IssueTrackingSecret> {
     if (this.cachedSecret) return this.cachedSecret;

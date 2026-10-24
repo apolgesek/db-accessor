@@ -6,7 +6,10 @@ const RATE_LIMIT_JITTER_MIN = 0.7;
 const RATE_LIMIT_JITTER_RANGE = 0.6;
 
 export class RateLimitError extends Error {
-  constructor(message: string, readonly retryAfterSeconds?: number) {
+  constructor(
+    message: string,
+    readonly retryAfterSeconds?: number,
+  ) {
     super(message);
     this.name = 'RateLimitError';
   }

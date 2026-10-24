@@ -1,5 +1,5 @@
 import { AttributeValue, DynamoDBClient, QueryCommand } from '@aws-sdk/client-dynamodb';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { APIResponse } from '../../shared/response';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 import { ApprovedBy, EntityRequest } from '../../shared/entity-request';
@@ -10,7 +10,7 @@ const MS_IN_HOUR = 3_600_000;
 class LambdaHandler {
   constructor(private readonly ddbClient: DynamoDBClient) {}
 
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     try {
       const claims = event.requestContext?.authorizer?.claims ?? {};
       const username = toAppUsername(claims.username);

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import fs from 'fs';
 import path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { DbAccessorDeployStack } from '../lib/deploy-stack';
+import { infraRoot } from '../lib/paths';
 import { DbAccessorStack } from '../lib/stack';
 
 const app = new cdk.App();
@@ -18,8 +18,8 @@ const githubRepo = 'db-accessor';
 const domain = `${stage}.4eyesdb.com`;
 const hostedZoneName = process.env.HOSTED_ZONE_NAME || domain;
 
-const samlMetadataFilePath = path.join('config', stage, 'idp', 'saml-metadata.xml');
-const samlMetadataFileContent = fs.readFileSync(path.resolve(samlMetadataFilePath), 'utf8');
+const samlMetadataFilePath = path.join(infraRoot, 'config', stage, 'idp', 'saml-metadata.xml');
+const samlMetadataFileContent = fs.readFileSync(samlMetadataFilePath, 'utf8');
 
 new DbAccessorDeployStack(app, `${projectName}-deploy-stack`, {
   env,

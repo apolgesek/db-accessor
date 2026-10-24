@@ -5,6 +5,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
+import { repoRoot } from './paths';
 
 export interface CreateLambdaOptions {
   projectName: string;
@@ -20,16 +21,16 @@ export interface CreateLambdaOptions {
 }
 
 export function createLambda(scope: Construct, options: CreateLambdaOptions) {
-  const node22 = (lambda.Runtime as any).NODEJS_22_X ?? new lambda.Runtime('nodejs22.x', lambda.RuntimeFamily.NODEJS);
-
   const functionName = `${options.projectName}-${options.fnName}`;
-  const entry = path.join(__dirname, '..', '..', 'src', 'functions', options.fnName.replaceAll('-', '_'), 'main.ts');
+  const entry = path.join(repoRoot, 'src', 'functions', options.fnName.replaceAll('-', '_'), 'main.ts');
 
   const fn = new nodejs.NodejsFunction(scope, functionName, {
     functionName,
     entry,
+    projectRoot: repoRoot,
+    depsLockFilePath: path.join(repoRoot, 'package-lock.json'),
     handler: 'lambdaHandler',
-    runtime: node22,
+    runtime: lambda.Runtime.NODEJS_22_X,
     architecture: lambda.Architecture.X86_64,
     environment: options.environment,
     timeout: options.timeout,

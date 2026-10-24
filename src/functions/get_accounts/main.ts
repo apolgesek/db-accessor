@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { OrganizationsClient, paginateListAccounts } from '@aws-sdk/client-organizations';
 import { DescribeRegionsCommand, EC2Client } from '@aws-sdk/client-ec2';
-import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayProxyResult } from 'aws-lambda';
 import { getStsSession } from '../../shared/get-sts-session';
 import { APIResponse } from '../../shared/response';
 import {
@@ -14,7 +13,7 @@ import {
 const ssm = new SSMClient({ region: process.env.AWS_REGION });
 
 class LambdaHandler {
-  async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
+  async handle(): Promise<APIGatewayProxyResult> {
     const managementAccount = process.env.AWS_MANAGEMENT_ACCOUNT;
     const awsRegion = process.env.AWS_REGION;
 

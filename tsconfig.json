@@ -9,6 +9,7 @@
     "types": ["jest", "node"],
     "moduleResolution": "node16",
     "esModuleInterop": true,
+    "isolatedModules": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
