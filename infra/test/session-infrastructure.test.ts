@@ -59,10 +59,18 @@ describe('session infrastructure', () => {
 
     expect(sessionTableActions('db-accessor-dev-create-session')).toEqual(['dynamodb:GetItem', 'dynamodb:PutItem']);
     expect(sessionTableActions('db-accessor-dev-get-session')).toEqual(['dynamodb:GetItem']);
+    expect(sessionTableActions('db-accessor-dev-record-session-activity')).toEqual([
+      'dynamodb:GetItem',
+      'dynamodb:UpdateItem',
+    ]);
   });
 
   test('configures the session Lambdas with the table and the metrics namespace', () => {
-    for (const functionName of ['db-accessor-dev-create-session', 'db-accessor-dev-get-session']) {
+    for (const functionName of [
+      'db-accessor-dev-create-session',
+      'db-accessor-dev-get-session',
+      'db-accessor-dev-record-session-activity',
+    ]) {
       template.hasResourceProperties('AWS::Lambda::Function', {
         FunctionName: functionName,
         Environment: {

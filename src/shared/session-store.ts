@@ -1,6 +1,6 @@
-import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { SessionRecord } from './session-policy';
+import { SessionClaims, SessionRecord } from './session-policy';
 
 // Thrown when the sessions table cannot be read or written; callers map it to 503 SESSION_UNAVAILABLE.
 export class SessionUnavailableError extends Error {
@@ -15,6 +15,10 @@ export interface SessionStore {
   create(record: SessionRecord): Promise<boolean>;
   // Strongly consistent read.
   get(sessionId: string): Promise<SessionRecord | undefined>;
+  // Moves the idle deadline to `idleExpiresAt` and increments the revision, only while the row is bound to these
+  // claims, not invalidated, active at `now`, and its deadline is earlier. Returns the updated row, or undefined
+  // when the condition fails.
+  extend(claims: SessionClaims, now: number, idleExpiresAt: number): Promise<SessionRecord | undefined>;
 }
 
 // The client must use `maxAttempts: 1`: an SDK retry would replay a write computed with an old `now`.
@@ -51,6 +55,33 @@ export class DynamoDbSessionStore implements SessionStore {
       );
       return Item ? (unmarshall(Item) as SessionRecord) : undefined;
     } catch {
+      throw new SessionUnavailableError();
+    }
+  }
+
+  async extend(claims: SessionClaims, now: number, idleExpiresAt: number): Promise<SessionRecord | undefined> {
+    try {
+      const { Attributes } = await this.ddbClient.send(
+        new UpdateItemCommand({
+          TableName: this.tableName,
+          Key: { sessionId: { S: claims.sessionId } },
+          UpdateExpression: 'SET idleExpiresAt = :idleExpiresAt ADD revision :one',
+          ConditionExpression:
+            'ownerSub = :ownerSub AND clientId = :clientId AND attribute_not_exists(invalidatedAt) ' +
+            'AND idleExpiresAt > :now AND idleExpiresAt < :idleExpiresAt',
+          ExpressionAttributeValues: marshall({
+            ':idleExpiresAt': idleExpiresAt,
+            ':one': 1,
+            ':ownerSub': claims.ownerSub,
+            ':clientId': claims.clientId,
+            ':now': now,
+          }),
+          ReturnValues: 'ALL_NEW',
+        }),
+      );
+      return Attributes ? (unmarshall(Attributes) as SessionRecord) : undefined;
+    } catch (err) {
+      if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return undefined;
       throw new SessionUnavailableError();
     }
   }

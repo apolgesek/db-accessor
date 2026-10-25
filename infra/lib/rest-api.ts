@@ -41,6 +41,7 @@ export const REST_LAMBDA_KEYS = {
   'admin-delete-configured-table': 'adminDeleteConfiguredTableFn',
   'create-session': 'createSessionFn',
   'get-session': 'getSessionFn',
+  'record-session-activity': 'recordSessionActivityFn',
 } as const satisfies Record<RestFunctionName, keyof ApplicationLambdaFunctions>;
 
 export type RestLambdaFunctions = Pick<ApplicationLambdaFunctions, (typeof REST_LAMBDA_KEYS)[RestFunctionName]>;
