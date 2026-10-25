@@ -15,7 +15,7 @@ const REJECTION_MESSAGES: Record<SessionRejection, string> = {
   LOGIN_REQUIRED: 'Login required',
 };
 
-export type SessionOperation = 'establish' | 'observe';
+export type SessionOperation = 'establish' | 'observe' | 'recordActivity';
 
 // Shared body of the session route handlers: claims, decision, response, structured log, and store failures.
 // Logs carry no tokens or session IDs.

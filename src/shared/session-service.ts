@@ -1,8 +1,10 @@
 import {
   establishRejectionFor,
+  IDLE_TIMEOUT_MS,
   newSessionRecord,
   rejectionFor,
   SessionClaims,
+  SessionRecord,
   SessionRejection,
   SessionSnapshot,
   toSnapshot,
@@ -37,7 +39,21 @@ export class SessionService {
   // Read only: never creates or extends.
   async observe(claims: SessionClaims): Promise<SessionDecision> {
     const now = this.clock();
-    const record = await this.store.get(claims.sessionId);
+    return this.decideStored(await this.store.get(claims.sessionId), claims, now);
+  }
+
+  // Qualifying activity: the only operation that extends.
+  async recordActivity(claims: SessionClaims): Promise<SessionDecision> {
+    const now = this.clock();
+    const extended = await this.store.extend(claims, now, now + IDLE_TIMEOUT_MS);
+    if (extended) return { ok: true, snapshot: toSnapshot(extended, now), created: false };
+
+    // No retry: the read only explains the refused write. A session still active lost the race to a deadline at
+    // least as late, which is returned unchanged.
+    return this.decideStored(await this.store.get(claims.sessionId), claims, now);
+  }
+
+  private decideStored(record: SessionRecord | undefined, claims: SessionClaims, now: number): SessionDecision {
     if (!record) return { ok: false, code: 'SESSION_REQUIRED' };
 
     const code = rejectionFor(record, claims, now);

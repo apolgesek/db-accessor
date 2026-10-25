@@ -54,6 +54,12 @@ export const REST_ROUTES = [
   },
   { method: 'POST', path: '/session', functionName: 'create-session', policy: 'sessionLifecycle' },
   { method: 'GET', path: '/session', functionName: 'get-session', policy: 'sessionLifecycle' },
+  {
+    method: 'POST',
+    path: '/session/activity',
+    functionName: 'record-session-activity',
+    policy: 'sessionLifecycle',
+  },
 ] as const satisfies readonly RestRoute[];
 
 export type RestFunctionName = (typeof REST_ROUTES)[number]['functionName'];

@@ -53,6 +53,7 @@ export interface ApplicationLambdaFunctions {
   adminGetPiiSuggestionsFn: lambda.IFunction;
   createSessionFn: lambda.IFunction;
   getSessionFn: lambda.IFunction;
+  recordSessionActivityFn: lambda.IFunction;
 }
 
 export interface DbAccessorLambdaFunctions extends ApplicationLambdaFunctions {
@@ -101,7 +102,13 @@ export function createSessionLambdas(scope: Construct, options: CreateSessionLam
   const getSessionFn = createConfiguredLambda(scope, options, { fnName: 'get-session', environment });
   grantSessionTable(getSessionFn, ['dynamodb:GetItem']);
 
-  return { createSessionFn, getSessionFn };
+  const recordSessionActivityFn = createConfiguredLambda(scope, options, {
+    fnName: 'record-session-activity',
+    environment,
+  });
+  grantSessionTable(recordSessionActivityFn, ['dynamodb:UpdateItem', 'dynamodb:GetItem']);
+
+  return { createSessionFn, getSessionFn, recordSessionActivityFn };
 }
 
 export function createPiiDetectorLambda(scope: Construct, options: LambdaFactoryDefaults): lambda.IFunction {
@@ -469,7 +476,7 @@ export function createApplicationLambdaFunctions(
   tables.configuredTablesTable.grantReadData(adminGetPiiSuggestionsFn);
   tables.piiSuggestionsTable.grantReadData(adminGetPiiSuggestionsFn);
 
-  const { createSessionFn, getSessionFn } = createSessionLambdas(scope, {
+  const { createSessionFn, getSessionFn, recordSessionActivityFn } = createSessionLambdas(scope, {
     ...options,
     sessionsTable: tables.sessionsTable,
   });
@@ -503,6 +510,7 @@ export function createApplicationLambdaFunctions(
     adminGetPiiSuggestionsFn,
     createSessionFn,
     getSessionFn,
+    recordSessionActivityFn,
   };
 }
 

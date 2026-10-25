@@ -33,6 +33,10 @@ describe('REST route table', () => {
   test('exempts only the session routes from the session policy', () => {
     const lifecycleRoutes = REST_ROUTES.filter((route) => route.policy === 'sessionLifecycle');
 
-    expect(lifecycleRoutes.map((route) => `${route.method} ${route.path}`)).toEqual(['POST /session', 'GET /session']);
+    expect(lifecycleRoutes.map((route) => `${route.method} ${route.path}`)).toEqual([
+      'POST /session',
+      'GET /session',
+      'POST /session/activity',
+    ]);
   });
 });
