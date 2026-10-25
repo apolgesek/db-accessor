@@ -35,6 +35,7 @@ Root and `infra/` have separate npm packages/lockfiles. Install dependencies wit
 - Admin handlers enforce shared `isAdmin` even with API authorization. Use shared `toAppUsername`; `USERNAME_PREFIX` must be defined (empty is valid).
 - Use `interface` for implemented behavior contracts and `type` for DTOs/value objects. Keep LF line endings and existing formatting.
 - Prefer `Boolean(value)` over `!!value` when converting values to booleans.
+- Write evergreen comments: what the code alone cannot tell a future reader (intent, constraints, non-obvious reasons). Put the history of a change (an earlier bug, a rejected alternative, a decision reached in conversation) in the commit message or PR description.
 
 ## Data and access boundaries
 
